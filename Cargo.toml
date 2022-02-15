@@ -1,0 +1,46 @@
+[package]
+name = "twatch-idf-rs"
+version = "0.1.0"
+authors = ["Pierre-Yves Aillet <pyaillet@gmail.com>"]
+edition = "2021"
+resolver = "2"
+
+[profile.release]
+opt-level = "s"
+
+[profile.dev]
+debug = true # Symbols are nice and they don't increase the size on Flash
+opt-level = "z"
+
+[features]
+native = ["esp-idf-sys/native"]
+
+[dependencies]
+# general
+mutex-trait = { version = "0.2" }
+bitmask-enum = { version = "1.1" }
+
+# platform
+esp-idf-sys = { version = "0.30", features = ["binstart"] }
+esp-idf-svc = "0.36.9"
+esp-idf-hal = "0.32.10"
+
+# hal
+embedded-hal = "=1.0.0-alpha.6"
+embedded-hal-0-2 = { package = "embedded-hal", version = "0.2", features = ["unproven"] }
+embedded-graphics = { version = "0.7" }
+display-interface-spi = { version = "0.4" }
+shared-bus = { version = "^0.2", features = ["std"] }
+
+# watchface
+watchface = { version = "^0.4", default-features = false }
+ 
+# drivers
+#st7789 = { version = "^0.6" }
+st7789 = { git = "https://github.com/almindor/st7789.git" }
+axp20x = { path = "../axp20x-rs" }
+pcf8563 = { version = "^0.1" }
+
+[build-dependencies]
+embuild = "0.28"
+anyhow = "1"

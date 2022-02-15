@@ -1,2 +1,3 @@
 # twatch-idf-rs
-twatch rust firmware with std using idf
+
+TTGO T-Watch 2020 v1 Rust firmware.
