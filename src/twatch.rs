@@ -1,6 +1,6 @@
 use std::{thread, time::Duration};
 
-use axp20x::AxpError;
+use embedded_hal_0_2::digital::v2::OutputPin;
 use esp_idf_hal::{
     delay,
     gpio::{self, Output, Unknown},
@@ -10,8 +10,9 @@ use esp_idf_hal::{
     spi,
 };
 use esp_idf_sys::EspError;
+use watchface;
 
-use crate::pmu::Pmu;
+use crate::pmu::{self, Pmu, PmuError};
 
 use display_interface_spi::SPIInterfaceNoCS;
 use embedded_graphics::{draw_target::DrawTarget, prelude::*, Drawable};
@@ -49,7 +50,7 @@ type Clock<'a> = PCF8563<
 pub enum TWatchError {
     ClockError(pcf8563::Error<esp_idf_hal::i2c::I2cError>),
     DisplayError(st7789::Error<EspError>),
-    PmuError(AxpError),
+    PmuError(PmuError),
     EspError(EspError),
 }
 
@@ -65,8 +66,8 @@ impl core::convert::From<st7789::Error<EspError>> for TWatchError {
     }
 }
 
-impl core::convert::From<AxpError> for TWatchError {
-    fn from(e: AxpError) -> Self {
+impl core::convert::From<PmuError> for TWatchError {
+    fn from(e: PmuError) -> Self {
         TWatchError::PmuError(e)
     }
 }
@@ -85,11 +86,25 @@ impl std::fmt::Display for TWatchError {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct WatchfaceState {
+    hours: u8,
+    minutes: u8,
+    battery_level: u8,
+}
+
+enum TwatchTiles {
+    Uninitialized,
+    SleepMode,
+    Watchface(WatchfaceState),
+}
+
 pub struct Twatch<'a> {
     pmu: Pmu<'a>,
     display: Display,
-    // motor: Motor,
+    motor: gpio::Gpio4<Output>,
     clock: Clock<'a>,
+    current_tile: TwatchTiles,
 }
 
 impl Twatch<'static> {
@@ -148,6 +163,8 @@ impl Twatch<'static> {
         );
         println!("Display Initialized");
 
+        let motor = peripherals.pins.gpio4.into_output().unwrap();
+
         let i2c = peripherals.i2c0;
         let sda = peripherals.pins.gpio21.into_output().unwrap();
         let scl = peripherals.pins.gpio22.into_output().unwrap();
@@ -167,8 +184,9 @@ impl Twatch<'static> {
         Twatch {
             pmu,
             display,
-            // motor: Motor::new(),
+            motor,
             clock,
+            current_tile: TwatchTiles::Uninitialized,
         }
     }
 
@@ -180,11 +198,64 @@ impl Twatch<'static> {
         Ok(())
     }
 
+    fn get_watchface_state(&mut self) -> Result<WatchfaceState, TWatchError> {
+        let date = self.clock.get_datetime()?;
+        let battery_level = self.pmu.get_battery_percentage()?;
+
+        Ok(WatchfaceState {
+            hours: date.hours,
+            minutes: date.minutes,
+            battery_level: battery_level.round() as u8,
+        })
+    }
+
+    fn switch_to(&mut self, new_tile: TwatchTiles) -> Result<(), TWatchError> {
+        match new_tile {
+            TwatchTiles::Uninitialized => {
+                println!("You should not swithc to this");
+            }
+            TwatchTiles::SleepMode => {
+                self.pmu.set_power_output(pmu::State::Off)?;
+
+                self.display
+                    .set_backlight(st7789::BacklightState::Off, &mut delay::Ets)?;
+            }
+            TwatchTiles::Watchface(state) => {
+                self.pmu.set_power_output(pmu::State::On)?;
+
+                self.display
+                    .set_backlight(st7789::BacklightState::On, &mut delay::Ets)?;
+
+                self.display
+                    .clear(embedded_graphics::pixelcolor::Rgb565::BLACK.into())?;
+                let time = watchface::time::Time::from_values(state.hours, state.minutes, 0);
+
+                let style: watchface::SimpleWatchfaceStyle<embedded_graphics::pixelcolor::Rgb565> =
+                    watchface::SimpleWatchfaceStyle::default();
+                watchface::Watchface::build()
+                    .with_time(time)
+                    .with_battery(watchface::battery::StateOfCharge::from_percentage(
+                        state.battery_level,
+                    ))
+                    .into_styled(style)
+                    .draw(&mut self.display)?;
+            }
+        }
+        self.current_tile = new_tile;
+        Ok(())
+    }
+
     pub fn run(&mut self) {
         println!("Launching main loop");
         self.display
             .set_backlight(st7789::BacklightState::Off, &mut delay::Ets)
             .expect("Error setting off backlight");
+        let watchface_state = self
+            .get_watchface_state()
+            .expect("Unable to get watchface state");
+        let initial_tile = TwatchTiles::Watchface(watchface_state);
+        self.switch_to(initial_tile)
+            .expect("Unable to switch to watchface");
         loop {
             thread::sleep(Duration::from_millis(1000u64));
             self.watch_loop()
@@ -193,26 +264,35 @@ impl Twatch<'static> {
     }
 
     fn watch_loop(&mut self) -> Result<(), TWatchError> {
-        self.display
-            .set_backlight(st7789::BacklightState::On, &mut delay::Ets)?;
+        let new_state = self.get_watchface_state()?;
+        if let TwatchTiles::Watchface(current_state) = self.current_tile {
+            if current_state != new_state {
+                println!("Not the same state, refreshing");
+                self.switch_to(TwatchTiles::Watchface(new_state))?;
+            } else {
+                println!(
+                    "Same state, not refreshing\n current: {:?}\n new: {:?}",
+                    current_state, new_state
+                );
+            }
+        }
 
-        self.display
-            .clear(embedded_graphics::pixelcolor::Rgb565::WHITE.into())?;
-        let date = self.clock.get_datetime()?;
-        println!("The time is {:?}", date);
-        let battery_level = self.pmu.get_battery_percentage()?;
-        println!("Battery level is {:?}", battery_level);
-        let time = watchface::time::Time::from_values(date.hours, date.minutes, date.seconds);
-
-        let style: watchface::SimpleWatchfaceStyle<embedded_graphics::pixelcolor::Rgb565> =
-            watchface::SimpleWatchfaceStyle::default();
-        watchface::Watchface::build()
-            .with_time(time)
-            .with_battery(watchface::battery::StateOfCharge::from_percentage(
-                battery_level.round() as u8,
-            ))
-            .into_styled(style)
-            .draw(&mut self.display)?;
+        if let Ok(true) = self.pmu.is_button_pressed() {
+            match self.current_tile {
+                TwatchTiles::SleepMode => {
+                    println!("Switching from sleep mode to watchface");
+                    self.switch_to(TwatchTiles::Watchface(new_state))
+                }
+                TwatchTiles::Watchface(_) => {
+                    println!("Switching from watchface to sleep mode");
+                    self.switch_to(TwatchTiles::SleepMode)
+                }
+                TwatchTiles::Uninitialized => {
+                    println!("Uninitialized, should not happen!");
+                    Ok(())
+                }
+            }?;
+        }
         Ok(())
         // self.pmu.tick();
         // self.display.tick();

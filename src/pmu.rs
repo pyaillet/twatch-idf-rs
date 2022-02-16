@@ -1,6 +1,23 @@
-use esp_idf_hal::{delay, gpio, i2c};
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use axp20x;
+use esp_idf_hal::{delay, gpio, i2c};
+use esp_idf_sys::{
+    self, gpio_int_type_t_GPIO_INTR_NEGEDGE, gpio_pulldown_t_GPIO_PULLDOWN_DISABLE,
+    gpio_pullup_t_GPIO_PULLUP_DISABLE, EspError, GPIO_MODE_DEF_INPUT,
+};
+
+use axp20x::{self, AxpError};
+
+static AXPXX_IRQ_TRIGGERED: AtomicBool = AtomicBool::new(false);
+
+const GPIO_INTR: u8 = 35;
+
+#[no_mangle]
+#[inline(never)]
+#[link_section = ".iram1"]
+pub extern "C" fn axpxx_irq_triggered(_: *mut esp_idf_sys::c_types::c_void) {
+    AXPXX_IRQ_TRIGGERED.store(true, std::sync::atomic::Ordering::SeqCst);
+}
 
 type EspSharedBusI2c0<'a> = shared_bus::I2cProxy<
     'a,
@@ -13,6 +30,30 @@ pub struct Pmu<'a> {
     axp20x: axp20x::Axpxx<EspSharedBusI2c0<'a>>,
 }
 
+#[derive(Debug)]
+pub enum PmuError {
+    AxpError(AxpError),
+    EspError(EspError),
+}
+
+impl core::convert::From<axp20x::AxpError> for PmuError {
+    fn from(e: axp20x::AxpError) -> Self {
+        PmuError::AxpError(e)
+    }
+}
+
+impl core::convert::From<EspError> for PmuError {
+    fn from(e: EspError) -> Self {
+        PmuError::EspError(e)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum State {
+    On,
+    Off,
+}
+
 impl Pmu<'static> {
     pub fn new(i2c: EspSharedBusI2c0<'static>) -> Self {
         Self {
@@ -20,7 +61,7 @@ impl Pmu<'static> {
         }
     }
 
-    pub fn init(&mut self) -> Result<(), axp20x::AxpError> {
+    pub fn init(&mut self) -> Result<(), PmuError> {
         self.axp20x.init().expect("Error inializing Axp2xx");
 
         self.axp20x
@@ -29,11 +70,69 @@ impl Pmu<'static> {
             .set_power_output(axp20x::Power::DcDc2, axp20x::State::Off, &mut delay::Ets)?;
         self.axp20x
             .set_power_output(axp20x::Power::Ldo4, axp20x::State::Off, &mut delay::Ets)?;
-        self.axp20x
-            .set_power_output(axp20x::Power::Ldo2, axp20x::State::On, &mut delay::Ets)
+
+        self.set_power_output(State::On)?;
+
+        self.init_irq()?;
+        Ok(())
     }
 
-    pub fn get_battery_percentage(&mut self) -> Result<f32, axp20x::AxpError> {
+    pub fn set_power_output(&mut self, state: State) -> Result<(), PmuError> {
+        self.axp20x
+            .set_power_output(
+                axp20x::Power::Ldo2,
+                match state {
+                    State::On => axp20x::State::On,
+                    State::Off => axp20x::State::Off,
+                },
+                &mut delay::Ets,
+            )
+            .map_err(|e| e.into())
+    }
+
+    pub fn is_button_pressed(&mut self) -> Result<bool, PmuError> {
+        let is_irq_triggered = AXPXX_IRQ_TRIGGERED.load(Ordering::SeqCst);
+        if is_irq_triggered {
+            AXPXX_IRQ_TRIGGERED.store(false, Ordering::SeqCst);
+
+            self.axp20x
+                .read_irq()
+                .and_then(|irq| Ok(irq.intersects(axp20x::EventsIrq::PowerKeyShortPress)))
+                .map_err(|e| e.into())
+        } else {
+            Ok(false)
+        }
+    }
+
+    pub fn init_irq(&mut self) -> Result<(), PmuError> {
+        let gpio_isr_config = esp_idf_sys::gpio_config_t {
+            mode: GPIO_MODE_DEF_INPUT,
+            pull_up_en: gpio_pullup_t_GPIO_PULLUP_DISABLE,
+            pull_down_en: gpio_pulldown_t_GPIO_PULLDOWN_DISABLE,
+            intr_type: gpio_int_type_t_GPIO_INTR_NEGEDGE,
+            pin_bit_mask: 1 << GPIO_INTR,
+        };
+        unsafe {
+            esp_idf_sys::rtc_gpio_deinit(GPIO_INTR.into());
+            esp_idf_sys::gpio_config(&gpio_isr_config);
+
+            esp_idf_sys::gpio_install_isr_service(0);
+            esp_idf_sys::gpio_isr_handler_add(
+                GPIO_INTR.into(),
+                Some(axpxx_irq_triggered),
+                std::ptr::null_mut(),
+            );
+        }
+
+        self.axp20x
+            .toggle_irq(axp20x::EventsIrq::PowerKeyShortPress, true)?;
+
+        self.axp20x.clear_irq()?;
+
+        Ok(())
+    }
+
+    pub fn get_battery_percentage(&mut self) -> Result<f32, PmuError> {
         if self.axp20x.is_battery_charging()? {
             let percent = self.axp20x.get_battery_percentage()?;
             if percent != 0x7F {

@@ -4,10 +4,10 @@ help: ## Show this help.
 	@echo 'usage: make [target] ...'
 	@echo
 	@echo 'targets:'
-	@egrep '^(.+)\:[^#]*##\ (.+)' ${MAKEFILE_LIST} | column -t -c 2 -s ':#'
+	@egrep '^([^:]+)\:[^#]*##\ (.+)' ${MAKEFILE_LIST}
 
 .PHONY: debug
-debug:   ## Make sure we can debug this.
+debug: ## Make sure we can debug this.
 	cargo b
 
 .PHONY: release
