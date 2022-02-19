@@ -1,5 +1,8 @@
+#![feature(int_abs_diff)]
+mod error;
 mod pmu;
 mod twatch;
+mod types;
 
 use esp_idf_hal::peripherals;
 use esp_idf_svc::{netif::EspNetifStack, nvs::EspDefaultNvs, sysloop::EspSysLoopStack};
@@ -14,7 +17,9 @@ fn main() {
 
     let mut twatch = twatch::Twatch::new(peripherals);
     println!("TWatch created");
-    twatch.init().expect("Error initializing TWatch");
+    twatch
+        .init()
+        .unwrap_or_else(|e| println!("Error initializing TWatch: {:?}", e));
     println!("TWatch initialized");
     twatch.run();
 }
@@ -31,5 +36,8 @@ fn init_esp() -> Result<(), EspError> {
     let sys_loop_stack = Arc::new(EspSysLoopStack::new()?);
     #[allow(unused)]
     let default_nvs = Arc::new(EspDefaultNvs::new()?);
+
+    unsafe { esp_idf_sys::gpio_install_isr_service(0) };
+
     Ok(())
 }

@@ -40,7 +40,9 @@ watchface = { version = "^0.4", default-features = false }
 #st7789 = { version = "^0.6" }
 st7789 = { git = "https://github.com/almindor/st7789.git" }
 axp20x = { path = "../axp20x-rs" }
+bma423 = { path = "../bma423-rs" }
 pcf8563 = { version = "^0.1" }
+ft6x36 = { path = "../ft6x36-rs" }
 
 [build-dependencies]
 embuild = "0.28"

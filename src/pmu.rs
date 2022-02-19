@@ -1,12 +1,12 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use esp_idf_hal::{delay, gpio, i2c};
+use esp_idf_hal::delay;
 use esp_idf_sys::{
     self, gpio_int_type_t_GPIO_INTR_NEGEDGE, gpio_pulldown_t_GPIO_PULLDOWN_DISABLE,
-    gpio_pullup_t_GPIO_PULLUP_DISABLE, EspError, GPIO_MODE_DEF_INPUT,
+    gpio_pullup_t_GPIO_PULLUP_DISABLE, GPIO_MODE_DEF_INPUT,
 };
 
-use axp20x::{self, AxpError};
+use axp20x;
 
 static AXPXX_IRQ_TRIGGERED: AtomicBool = AtomicBool::new(false);
 
@@ -19,33 +19,11 @@ pub extern "C" fn axpxx_irq_triggered(_: *mut esp_idf_sys::c_types::c_void) {
     AXPXX_IRQ_TRIGGERED.store(true, std::sync::atomic::Ordering::SeqCst);
 }
 
-type EspSharedBusI2c0<'a> = shared_bus::I2cProxy<
-    'a,
-    std::sync::Mutex<
-        esp_idf_hal::i2c::Master<i2c::I2C0, gpio::Gpio21<gpio::Output>, gpio::Gpio22<gpio::Output>>,
-    >,
->;
+use crate::error::PmuError;
+use crate::types::EspSharedBusI2c0;
 
 pub struct Pmu<'a> {
     axp20x: axp20x::Axpxx<EspSharedBusI2c0<'a>>,
-}
-
-#[derive(Debug)]
-pub enum PmuError {
-    AxpError(AxpError),
-    EspError(EspError),
-}
-
-impl core::convert::From<axp20x::AxpError> for PmuError {
-    fn from(e: axp20x::AxpError) -> Self {
-        PmuError::AxpError(e)
-    }
-}
-
-impl core::convert::From<EspError> for PmuError {
-    fn from(e: EspError) -> Self {
-        PmuError::EspError(e)
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -62,14 +40,23 @@ impl Pmu<'static> {
     }
 
     pub fn init(&mut self) -> Result<(), PmuError> {
-        self.axp20x.init().expect("Error inializing Axp2xx");
+        self.axp20x.init()?;
 
-        self.axp20x
-            .set_power_output(axp20x::Power::Exten, axp20x::State::Off, &mut delay::Ets)?;
-        self.axp20x
-            .set_power_output(axp20x::Power::DcDc2, axp20x::State::Off, &mut delay::Ets)?;
-        self.axp20x
-            .set_power_output(axp20x::Power::Ldo4, axp20x::State::Off, &mut delay::Ets)?;
+        self.axp20x.set_power_output(
+            axp20x::Power::Exten,
+            axp20x::PowerState::Off,
+            &mut delay::Ets,
+        )?;
+        self.axp20x.set_power_output(
+            axp20x::Power::DcDc2,
+            axp20x::PowerState::Off,
+            &mut delay::Ets,
+        )?;
+        self.axp20x.set_power_output(
+            axp20x::Power::Ldo4,
+            axp20x::PowerState::Off,
+            &mut delay::Ets,
+        )?;
 
         self.set_power_output(State::On)?;
 
@@ -78,16 +65,15 @@ impl Pmu<'static> {
     }
 
     pub fn set_power_output(&mut self, state: State) -> Result<(), PmuError> {
-        self.axp20x
-            .set_power_output(
-                axp20x::Power::Ldo2,
-                match state {
-                    State::On => axp20x::State::On,
-                    State::Off => axp20x::State::Off,
-                },
-                &mut delay::Ets,
-            )
-            .map_err(|e| e.into())
+        self.axp20x.set_power_output(
+            axp20x::Power::Ldo2,
+            match state {
+                State::On => axp20x::PowerState::On,
+                State::Off => axp20x::PowerState::Off,
+            },
+            &mut delay::Ets,
+        )?;
+        Ok(())
     }
 
     pub fn is_button_pressed(&mut self) -> Result<bool, PmuError> {
@@ -116,7 +102,7 @@ impl Pmu<'static> {
             esp_idf_sys::rtc_gpio_deinit(GPIO_INTR.into());
             esp_idf_sys::gpio_config(&gpio_isr_config);
 
-            esp_idf_sys::gpio_install_isr_service(0);
+            // esp_idf_sys::gpio_install_isr_service(0);
             esp_idf_sys::gpio_isr_handler_add(
                 GPIO_INTR.into(),
                 Some(axpxx_irq_triggered),
