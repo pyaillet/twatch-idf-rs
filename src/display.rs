@@ -1,3 +1,5 @@
+use anyhow::Result;
+
 use display_interface_spi::SPIInterfaceNoCS;
 
 use esp_idf_hal::gpio::Output;
@@ -30,7 +32,6 @@ pub fn new(
         >,
         gpio::Gpio12<Output>,
     >,
-    EspError,
 > {
     Ok(display)
 }

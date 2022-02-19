@@ -1,4 +1,5 @@
 use std::{
+    fmt::Formatter,
     sync::atomic::{AtomicBool, Ordering},
     thread,
     time::Duration,
@@ -19,7 +20,9 @@ use esp_idf_sys::{
 
 use watchface;
 
-use crate::error::*;
+use anyhow::Result;
+use log::*;
+
 use crate::pmu::{self, Pmu};
 use crate::types::*;
 
@@ -30,6 +33,52 @@ use bma423::Bma423;
 use ft6x36::Ft6x36;
 use pcf8563::PCF8563;
 use st7789::ST7789;
+
+#[derive(Debug)]
+pub enum TwatchError {
+    ClockError,
+    DisplayError,
+    PmuError,
+    I2cError,
+}
+
+impl std::fmt::Display for TwatchError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        f.write_fmt(format_args!("{:?}", self))
+    }
+}
+
+impl std::error::Error for TwatchError {}
+
+impl From<axp20x::AxpError<esp_idf_hal::i2c::I2cError>> for TwatchError {
+    fn from(_e: axp20x::AxpError<esp_idf_hal::i2c::I2cError>) -> Self {
+        TwatchError::PmuError
+    }
+}
+
+impl From<esp_idf_hal::i2c::I2cError> for TwatchError {
+    fn from(_e: esp_idf_hal::i2c::I2cError) -> Self {
+        TwatchError::I2cError
+    }
+}
+
+impl From<st7789::Error<EspError>> for TwatchError {
+    fn from(_e: st7789::Error<EspError>) -> Self {
+        TwatchError::DisplayError
+    }
+}
+
+impl From<bma423::Bma423Error> for TwatchError {
+    fn from(_e: bma423::Bma423Error) -> Self {
+        TwatchError::ClockError
+    }
+}
+
+impl From<pcf8563::Error<esp_idf_hal::i2c::I2cError>> for TwatchError {
+    fn from(_e: pcf8563::Error<esp_idf_hal::i2c::I2cError>) -> Self {
+        TwatchError::ClockError
+    }
+}
 
 static CLOCK_IRQ_TRIGGERED: AtomicBool = AtomicBool::new(false);
 static TOUCHSCREEN_IRQ_TRIGGERED: AtomicBool = AtomicBool::new(false);
@@ -135,7 +184,7 @@ impl Twatch<'static> {
             config,
         )
         .expect("Error initializing SPI");
-        println!("SPI Initialized");
+        info!("SPI Initialized");
         let di = SPIInterfaceNoCS::new(spi, dc.into_output().expect("Error setting dc to output"));
         let display = st7789::ST7789::new(
             di,
@@ -145,7 +194,7 @@ impl Twatch<'static> {
             240,
             240,
         );
-        println!("Display Initialized");
+        info!("Display Initialized");
 
         let motor = peripherals.pins.gpio4.into_output().unwrap();
 
@@ -158,10 +207,10 @@ impl Twatch<'static> {
             .unwrap();
 
         let i2c0_shared_bus: &'static _ = shared_bus::new_std!(esp_idf_hal::i2c::Master<i2c::I2C0, gpio::Gpio21<gpio::Output>, gpio::Gpio22<gpio::Output>> = i2c0).unwrap_or_else(|| {
-            println!("Error initializing shared bus");
+            error!("Error initializing shared bus");
             panic!("Error")
         });
-        println!("I2c shared bus initialized");
+        info!("I2c shared bus initialized");
 
         let clock = PCF8563::new(i2c0_shared_bus.acquire_i2c());
         let pmu = Pmu::new(i2c0_shared_bus.acquire_i2c());
@@ -188,21 +237,24 @@ impl Twatch<'static> {
         }
     }
 
-    pub fn init(&mut self) -> Result<(), TWatchError> {
+    pub fn init(&mut self) -> Result<()> {
         self.pmu.init()?;
-        self.display.init(&mut delay::Ets)?;
         self.display
-            .set_backlight(st7789::BacklightState::On, &mut delay::Ets)?;
+            .init(&mut delay::Ets)
+            .map_err(TwatchError::from)?;
+        self.display
+            .set_backlight(st7789::BacklightState::On, &mut delay::Ets)
+            .map_err(TwatchError::from)?;
 
-        self.touch_screen.init()?;
+        self.touch_screen.init().map_err(TwatchError::from)?;
         match self.touch_screen.get_info() {
-            Some(info) => println!("Touch screen info: {info:?}"),
-            None => println!("No info"),
+            Some(info) => info!("Touch screen info: {info:?}"),
+            None => warn!("No info"),
         }
 
         self.accel.init()?;
-        let chip_id = self.accel.get_chip_id()?;
-        println!("BMA423 chip id: {}", chip_id as u8);
+        let chip_id = self.accel.get_chip_id().map_err(TwatchError::from)?;
+        info!("BMA423 chip id: {}", chip_id as u8);
 
         self.init_accel_irq()?;
 
@@ -213,7 +265,7 @@ impl Twatch<'static> {
         Ok(())
     }
 
-    fn init_irq(&mut self, pin_number: u8, handler: gpio_isr_t) -> Result<(), EspError> {
+    fn init_irq(&mut self, pin_number: u8, handler: gpio_isr_t) -> Result<()> {
         let gpio_isr_config = esp_idf_sys::gpio_config_t {
             mode: GPIO_MODE_DEF_INPUT,
             pull_up_en: gpio_pullup_t_GPIO_PULLUP_DISABLE,
@@ -230,19 +282,19 @@ impl Twatch<'static> {
         Ok(())
     }
 
-    pub fn init_accel_irq(&mut self) -> Result<(), EspError> {
+    pub fn init_accel_irq(&mut self) -> Result<()> {
         self.init_irq(GPIO_ACCEL_INTR, Some(accel_irq_triggered))
     }
-    pub fn init_touchscreen_irq(&mut self) -> Result<(), EspError> {
+    pub fn init_touchscreen_irq(&mut self) -> Result<()> {
         self.init_irq(GPIO_TOUCHSCREEN_INTR, Some(touchscreen_irq_triggered))
     }
 
-    pub fn init_clock_irq(&mut self) -> Result<(), EspError> {
+    pub fn init_clock_irq(&mut self) -> Result<()> {
         self.init_irq(GPIO_CLOCK_INTR, Some(clock_irq_triggered))
     }
 
-    fn get_watchface_state(&mut self) -> Result<WatchfaceState, TWatchError> {
-        let date = self.clock.get_datetime()?;
+    fn get_watchface_state(&mut self) -> Result<WatchfaceState> {
+        let date = self.clock.get_datetime().map_err(TwatchError::from)?;
         let battery_level = self.pmu.get_battery_percentage()?;
 
         Ok(WatchfaceState {
@@ -252,16 +304,17 @@ impl Twatch<'static> {
         })
     }
 
-    fn switch_to(&mut self, new_tile: TwatchTiles) -> Result<(), TWatchError> {
+    fn switch_to(&mut self, new_tile: TwatchTiles) -> Result<()> {
         match new_tile {
             TwatchTiles::Uninitialized => {
-                println!("You should not swithc to this");
+                warn!("You should not switch to this");
             }
             TwatchTiles::SleepMode => {
                 self.pmu.set_power_output(pmu::State::Off)?;
 
                 self.display
-                    .set_backlight(st7789::BacklightState::Off, &mut delay::Ets)?;
+                    .set_backlight(st7789::BacklightState::Off, &mut delay::Ets)
+                    .map_err(TwatchError::from)?;
             }
             TwatchTiles::Watchface(state) => {
                 self.pmu.set_power_output(pmu::State::On)?;
@@ -276,9 +329,11 @@ impl Twatch<'static> {
                         state.battery_level,
                     ))
                     .into_styled(style)
-                    .draw(&mut self.display)?;
+                    .draw(&mut self.display)
+                    .map_err(TwatchError::from)?;
                 self.display
-                    .set_backlight(st7789::BacklightState::On, &mut delay::Ets)?;
+                    .set_backlight(st7789::BacklightState::On, &mut delay::Ets)
+                    .map_err(TwatchError::from)?;
             }
         }
         self.current_tile = new_tile;
@@ -286,7 +341,7 @@ impl Twatch<'static> {
     }
 
     pub fn run(&mut self) {
-        println!("Launching main loop");
+        info!("Launching main loop");
 
         self.display
             .set_backlight(st7789::BacklightState::Off, &mut delay::Ets)
@@ -301,42 +356,25 @@ impl Twatch<'static> {
         loop {
             thread::sleep(Duration::from_millis(1000u64));
             self.watch_loop()
-                .unwrap_or_else(|e| println!("Error displaying watchface {:?}", e));
+                .unwrap_or_else(|e| error!("Error displaying watchface {:?}", e));
         }
     }
 
-    fn watch_loop(&mut self) -> Result<(), TWatchError> {
+    fn watch_loop(&mut self) -> Result<()> {
         let new_state = self.get_watchface_state()?;
         if let TwatchTiles::Watchface(current_state) = self.current_tile {
             if !current_state.same_state(&new_state) {
-                println!("Not the same state, refreshing\n current: {current_state:?}\n new: {new_state:?}");
                 self.switch_to(TwatchTiles::Watchface(new_state))?;
-            } else {
-                println!(
-                    "Same state, not refreshing\n current: {current_state:?}\n new: {new_state:?}"
-                );
             }
         }
 
         if let Ok(true) = self.pmu.is_button_pressed() {
             match self.current_tile {
-                TwatchTiles::SleepMode => {
-                    println!("Switching from sleep mode to watchface");
-                    self.switch_to(TwatchTiles::Watchface(new_state))
-                }
-                TwatchTiles::Watchface(_) => {
-                    println!("Switching from watchface to sleep mode");
-                    self.switch_to(TwatchTiles::SleepMode)
-                }
-                TwatchTiles::Uninitialized => {
-                    println!("Uninitialized, should not happen!");
-                    Ok(())
-                }
+                TwatchTiles::SleepMode => self.switch_to(TwatchTiles::Watchface(new_state)),
+                TwatchTiles::Watchface(_) => self.switch_to(TwatchTiles::SleepMode),
+                TwatchTiles::Uninitialized => Ok(()),
             }?;
         }
         Ok(())
-        // self.pmu.tick();
-        // self.display.tick();
-        // self.motor.tick();
     }
 }

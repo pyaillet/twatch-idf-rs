@@ -18,11 +18,13 @@ native = ["esp-idf-sys/native"]
 
 [dependencies]
 # general
+anyhow = {version = "1", features = ["backtrace"]}
 mutex-trait = { version = "0.2" }
 bitmask-enum = { version = "1.1" }
+log = "0.4"
 
 # platform
-esp-idf-sys = { version = "0.30", features = ["binstart"] }
+esp-idf-sys = { version = "0.30", features = ["binstart", "std"] }
 esp-idf-svc = "0.36.9"
 esp-idf-hal = "0.32.10"
 
@@ -38,8 +40,9 @@ watchface = { version = "^0.4", default-features = false }
  
 # drivers
 #st7789 = { version = "^0.6" }
-st7789 = { git = "https://github.com/almindor/st7789.git" }
-axp20x = { path = "../axp20x-rs" }
+#st7789 = { git = "https://github.com/almindor/st7789.git" }
+st7789 = { path = "../st7789", features = ["std"] }
+axp20x = { path = "../axp20x-rs", features = ["std"] }
 bma423 = { path = "../bma423-rs" }
 pcf8563 = { version = "^0.1" }
 ft6x36 = { path = "../ft6x36-rs" }

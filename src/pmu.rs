@@ -1,5 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use anyhow::Result;
+
 use esp_idf_hal::delay;
 use esp_idf_sys::{
     self, gpio_int_type_t_GPIO_INTR_NEGEDGE, gpio_pulldown_t_GPIO_PULLDOWN_DISABLE,
@@ -19,7 +21,6 @@ pub extern "C" fn axpxx_irq_triggered(_: *mut esp_idf_sys::c_types::c_void) {
     AXPXX_IRQ_TRIGGERED.store(true, std::sync::atomic::Ordering::SeqCst);
 }
 
-use crate::error::PmuError;
 use crate::types::EspSharedBusI2c0;
 
 pub struct Pmu<'a> {
@@ -39,24 +40,30 @@ impl Pmu<'static> {
         }
     }
 
-    pub fn init(&mut self) -> Result<(), PmuError> {
+    pub fn init(&mut self) -> Result<()> {
         self.axp20x.init()?;
 
-        self.axp20x.set_power_output(
-            axp20x::Power::Exten,
-            axp20x::PowerState::Off,
-            &mut delay::Ets,
-        )?;
-        self.axp20x.set_power_output(
-            axp20x::Power::DcDc2,
-            axp20x::PowerState::Off,
-            &mut delay::Ets,
-        )?;
-        self.axp20x.set_power_output(
-            axp20x::Power::Ldo4,
-            axp20x::PowerState::Off,
-            &mut delay::Ets,
-        )?;
+        self.axp20x
+            .set_power_output(
+                axp20x::Power::Exten,
+                axp20x::PowerState::Off,
+                &mut delay::Ets,
+            )
+            .map_err(crate::twatch::TwatchError::from)?;
+        self.axp20x
+            .set_power_output(
+                axp20x::Power::DcDc2,
+                axp20x::PowerState::Off,
+                &mut delay::Ets,
+            )
+            .map_err(crate::twatch::TwatchError::from)?;
+        self.axp20x
+            .set_power_output(
+                axp20x::Power::Ldo4,
+                axp20x::PowerState::Off,
+                &mut delay::Ets,
+            )
+            .map_err(crate::twatch::TwatchError::from)?;
 
         self.set_power_output(State::On)?;
 
@@ -64,19 +71,21 @@ impl Pmu<'static> {
         Ok(())
     }
 
-    pub fn set_power_output(&mut self, state: State) -> Result<(), PmuError> {
-        self.axp20x.set_power_output(
-            axp20x::Power::Ldo2,
-            match state {
-                State::On => axp20x::PowerState::On,
-                State::Off => axp20x::PowerState::Off,
-            },
-            &mut delay::Ets,
-        )?;
+    pub fn set_power_output(&mut self, state: State) -> Result<()> {
+        self.axp20x
+            .set_power_output(
+                axp20x::Power::Ldo2,
+                match state {
+                    State::On => axp20x::PowerState::On,
+                    State::Off => axp20x::PowerState::Off,
+                },
+                &mut delay::Ets,
+            )
+            .map_err(crate::twatch::TwatchError::from)?;
         Ok(())
     }
 
-    pub fn is_button_pressed(&mut self) -> Result<bool, PmuError> {
+    pub fn is_button_pressed(&mut self) -> Result<bool> {
         let is_irq_triggered = AXPXX_IRQ_TRIGGERED.load(Ordering::SeqCst);
         if is_irq_triggered {
             AXPXX_IRQ_TRIGGERED.store(false, Ordering::SeqCst);
@@ -90,7 +99,7 @@ impl Pmu<'static> {
         }
     }
 
-    pub fn init_irq(&mut self) -> Result<(), PmuError> {
+    pub fn init_irq(&mut self) -> Result<()> {
         let gpio_isr_config = esp_idf_sys::gpio_config_t {
             mode: GPIO_MODE_DEF_INPUT,
             pull_up_en: gpio_pullup_t_GPIO_PULLUP_DISABLE,
@@ -118,7 +127,7 @@ impl Pmu<'static> {
         Ok(())
     }
 
-    pub fn get_battery_percentage(&mut self) -> Result<f32, PmuError> {
+    pub fn get_battery_percentage(&mut self) -> Result<f32> {
         if self.axp20x.is_battery_charging()? {
             let percent = self.axp20x.get_battery_percentage()?;
             if percent != 0x7F {
