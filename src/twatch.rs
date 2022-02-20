@@ -133,7 +133,7 @@ enum TwatchTiles {
 pub struct Twatch<'a> {
     pmu: Pmu<'a>,
     display: ST7789<EspSpi2InterfaceNoCS, gpio::Gpio12<Output>>,
-    motor: gpio::Gpio4<Output>,
+    _motor: gpio::Gpio4<Output>,
     clock: PCF8563<EspSharedBusI2c0<'a>>,
     accel: Bma423<EspSharedBusI2c0<'a>>,
     touch_screen: Ft6x36<EspI2c1>,
@@ -229,7 +229,7 @@ impl Twatch<'static> {
         Twatch {
             pmu,
             display,
-            motor,
+            _motor: motor,
             clock,
             accel,
             touch_screen,
@@ -354,7 +354,7 @@ impl Twatch<'static> {
             .expect("Unable to switch to watchface");
 
         loop {
-            thread::sleep(Duration::from_millis(1000u64));
+            thread::sleep(Duration::from_millis(100u64));
             self.watch_loop()
                 .unwrap_or_else(|e| error!("Error displaying watchface {:?}", e));
         }
@@ -368,9 +368,42 @@ impl Twatch<'static> {
             }
         }
 
+        self.process_touch_event()?;
+
+        self.process_accel_event()?;
+
+        self.process_button_event(new_state)?;
+
+        Ok(())
+    }
+
+    fn process_touch_event(&mut self) -> Result<()> {
+        let is_irq_triggered = TOUCHSCREEN_IRQ_TRIGGERED.load(Ordering::SeqCst);
+        if is_irq_triggered {
+            TOUCHSCREEN_IRQ_TRIGGERED.store(false, Ordering::SeqCst);
+
+            info!(
+                "Touchscreen irq triggered {:?}",
+                self.touch_screen.get_touch_event()?
+            );
+        }
+        Ok(())
+    }
+
+    fn process_accel_event(&mut self) -> Result<()> {
+        let is_irq_triggered = ACCEL_IRQ_TRIGGERED.load(Ordering::SeqCst);
+        if is_irq_triggered {
+            ACCEL_IRQ_TRIGGERED.store(false, Ordering::SeqCst);
+
+            info!("Accel irq triggered");
+        }
+        Ok(())
+    }
+
+    fn process_button_event(&mut self, watchface_state: WatchfaceState) -> Result<()> {
         if let Ok(true) = self.pmu.is_button_pressed() {
             match self.current_tile {
-                TwatchTiles::SleepMode => self.switch_to(TwatchTiles::Watchface(new_state)),
+                TwatchTiles::SleepMode => self.switch_to(TwatchTiles::Watchface(watchface_state)),
                 TwatchTiles::Watchface(_) => self.switch_to(TwatchTiles::SleepMode),
                 TwatchTiles::Uninitialized => Ok(()),
             }?;
