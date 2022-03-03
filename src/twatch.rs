@@ -1,10 +1,12 @@
 use std::{
+    convert::Infallible,
     fmt::Formatter,
     sync::atomic::{AtomicBool, Ordering},
     thread,
     time::Duration,
 };
 
+use embedded_hal_0_2::digital::v2::OutputPin;
 use esp_idf_hal::{
     delay,
     gpio::{self, Output},
@@ -15,24 +17,26 @@ use esp_idf_hal::{
 };
 use esp_idf_sys::{
     self, gpio_int_type_t_GPIO_INTR_NEGEDGE, gpio_isr_t, gpio_pulldown_t_GPIO_PULLDOWN_DISABLE,
-    gpio_pullup_t_GPIO_PULLUP_DISABLE, EspError, GPIO_MODE_DEF_INPUT,
+    gpio_pullup_t_GPIO_PULLUP_DISABLE, GPIO_MODE_DEF_INPUT,
 };
-
-use watchface;
 
 use anyhow::Result;
 use log::*;
 
-use crate::pmu::{self, Pmu};
-use crate::types::*;
-
 use display_interface_spi::SPIInterfaceNoCS;
-use embedded_graphics::Drawable;
+use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
+use embedded_graphics_framebuf::FrameBuf;
 
-use bma423::Bma423;
+use bma423::{Bma423, InterruptStatus};
 use ft6x36::Ft6x36;
+use mipidsi::Display;
 use pcf8563::PCF8563;
-use st7789::ST7789;
+
+use crate::types::*;
+use crate::{
+    pmu::Pmu,
+    tiles::{self, WatchTile},
+};
 
 #[derive(Debug)]
 pub enum TwatchError {
@@ -40,6 +44,7 @@ pub enum TwatchError {
     DisplayError,
     PmuError,
     I2cError,
+    AccelError,
 }
 
 impl std::fmt::Display for TwatchError {
@@ -62,15 +67,21 @@ impl From<esp_idf_hal::i2c::I2cError> for TwatchError {
     }
 }
 
-impl From<st7789::Error<EspError>> for TwatchError {
-    fn from(_e: st7789::Error<EspError>) -> Self {
+impl From<mipidsi::Error<Infallible>> for TwatchError {
+    fn from(_e: mipidsi::Error<Infallible>) -> Self {
+        TwatchError::DisplayError
+    }
+}
+
+impl From<Infallible> for TwatchError {
+    fn from(_e: Infallible) -> Self {
         TwatchError::DisplayError
     }
 }
 
 impl From<bma423::Bma423Error> for TwatchError {
     fn from(_e: bma423::Bma423Error) -> Self {
-        TwatchError::ClockError
+        TwatchError::AccelError
     }
 }
 
@@ -109,40 +120,20 @@ pub extern "C" fn clock_irq_triggered(_: *mut esp_idf_sys::c_types::c_void) {
     CLOCK_IRQ_TRIGGERED.store(true, Ordering::SeqCst);
 }
 
-#[derive(Debug, Clone, Copy)]
-struct WatchfaceState {
-    hours: u8,
-    minutes: u8,
-    battery_level: u8,
-}
-
-impl WatchfaceState {
-    fn same_state(&self, other: &WatchfaceState) -> bool {
-        self.hours == other.hours
-            && self.minutes == other.minutes
-            && self.battery_level.abs_diff(other.battery_level) < 5
-    }
-}
-
-enum TwatchTiles {
-    Uninitialized,
-    SleepMode,
-    Watchface(WatchfaceState),
-}
-
 pub struct Twatch<'a> {
-    pmu: Pmu<'a>,
-    display: ST7789<EspSpi2InterfaceNoCS, gpio::Gpio12<Output>>,
-    _motor: gpio::Gpio4<Output>,
-    clock: PCF8563<EspSharedBusI2c0<'a>>,
-    accel: Bma423<EspSharedBusI2c0<'a>>,
-    touch_screen: Ft6x36<EspI2c1>,
-    current_tile: TwatchTiles,
+    pub pmu: Pmu<'a>,
+    pub display: Display<EspSpi2InterfaceNoCS, mipidsi::NoPin, mipidsi::models::ST7789>,
+    pub frame_buffer: &'a mut FrameBuf<Rgb565, 240_usize, 240_usize>,
+    pub backlight: gpio::Gpio12<Output>,
+    pub _motor: gpio::Gpio4<Output>,
+    pub clock: PCF8563<EspSharedBusI2c0<'a>>,
+    pub accel: Bma423<EspSharedBusI2c0<'a>>,
+    pub touch_screen: Ft6x36<EspI2c1>,
 }
 
 impl Twatch<'static> {
     pub fn new(peripherals: Peripherals) -> Twatch<'static> {
-        let bl = peripherals
+        let mut backlight = peripherals
             .pins
             .gpio12
             .into_output()
@@ -186,15 +177,13 @@ impl Twatch<'static> {
         .expect("Error initializing SPI");
         info!("SPI Initialized");
         let di = SPIInterfaceNoCS::new(spi, dc.into_output().expect("Error setting dc to output"));
-        let display = st7789::ST7789::new(
-            di,
-            None,
-            Some(bl),
-            // SP7789V is designed to drive 240x320 screens, even though the TTGO physical screen is smaller
-            240,
-            240,
-        );
+        let display = Display::st7789_without_rst(di);
         info!("Display Initialized");
+        backlight.set_high().unwrap();
+
+        static mut FBUFF: FrameBuf<Rgb565, 240_usize, 240_usize> =
+            FrameBuf([[embedded_graphics::pixelcolor::Rgb565::BLACK; 240]; 240]);
+        let frame_buffer = unsafe { &mut FBUFF };
 
         let motor = peripherals.pins.gpio4.into_output().unwrap();
 
@@ -229,11 +218,12 @@ impl Twatch<'static> {
         Twatch {
             pmu,
             display,
+            frame_buffer,
+            backlight,
             _motor: motor,
             clock,
             accel,
             touch_screen,
-            current_tile: TwatchTiles::Uninitialized,
         }
     }
 
@@ -242,9 +232,6 @@ impl Twatch<'static> {
         self.display
             .init(&mut delay::Ets)
             .map_err(TwatchError::from)?;
-        self.display
-            .set_backlight(st7789::BacklightState::On, &mut delay::Ets)
-            .map_err(TwatchError::from)?;
 
         self.touch_screen.init().map_err(TwatchError::from)?;
         match self.touch_screen.get_info() {
@@ -252,9 +239,20 @@ impl Twatch<'static> {
             None => warn!("No info"),
         }
 
-        self.accel.init()?;
+        self.accel
+            .init(&mut delay::Ets)
+            .map_err(TwatchError::from)?;
         let chip_id = self.accel.get_chip_id().map_err(TwatchError::from)?;
         info!("BMA423 chip id: {}", chip_id as u8);
+
+        self.accel
+            .set_accel_config(
+                bma423::AccelConfigOdr::Odr100,
+                bma423::AccelConfigBandwidth::NormAvg4,
+                bma423::AccelConfigPerfMode::Continuous,
+                bma423::AccelRange::Range2g,
+            )
+            .map_err(TwatchError::from)?;
 
         self.init_accel_irq()?;
 
@@ -283,6 +281,17 @@ impl Twatch<'static> {
     }
 
     pub fn init_accel_irq(&mut self) -> Result<()> {
+        self.accel
+            .enable_interrupt(
+                InterruptStatus::StepCounterOut
+                    | InterruptStatus::ActivityTypeOut
+                    | InterruptStatus::WristTiltOut
+                    | InterruptStatus::WakeUpOut
+                    | InterruptStatus::AnyNoMotionOut
+                    | InterruptStatus::ErrorIntOut,
+            )
+            .map_err(TwatchError::from)?;
+
         self.init_irq(GPIO_ACCEL_INTR, Some(accel_irq_triggered))
     }
     pub fn init_touchscreen_irq(&mut self) -> Result<()> {
@@ -293,86 +302,32 @@ impl Twatch<'static> {
         self.init_irq(GPIO_CLOCK_INTR, Some(clock_irq_triggered))
     }
 
-    fn get_watchface_state(&mut self) -> Result<WatchfaceState> {
-        let date = self.clock.get_datetime().map_err(TwatchError::from)?;
-        let battery_level = self.pmu.get_battery_percentage()?;
-
-        Ok(WatchfaceState {
-            hours: date.hours,
-            minutes: date.minutes,
-            battery_level: battery_level.round() as u8,
-        })
-    }
-
-    fn switch_to(&mut self, new_tile: TwatchTiles) -> Result<()> {
-        match new_tile {
-            TwatchTiles::Uninitialized => {
-                warn!("You should not switch to this");
-            }
-            TwatchTiles::SleepMode => {
-                self.pmu.set_power_output(pmu::State::Off)?;
-
-                self.display
-                    .set_backlight(st7789::BacklightState::Off, &mut delay::Ets)
-                    .map_err(TwatchError::from)?;
-            }
-            TwatchTiles::Watchface(state) => {
-                self.pmu.set_power_output(pmu::State::On)?;
-
-                let time = watchface::time::Time::from_values(state.hours, state.minutes, 0);
-
-                let style: watchface::SimpleWatchfaceStyle<embedded_graphics::pixelcolor::Rgb565> =
-                    watchface::SimpleWatchfaceStyle::default();
-                watchface::Watchface::build()
-                    .with_time(time)
-                    .with_battery(watchface::battery::StateOfCharge::from_percentage(
-                        state.battery_level,
-                    ))
-                    .into_styled(style)
-                    .draw(&mut self.display)
-                    .map_err(TwatchError::from)?;
-                self.display
-                    .set_backlight(st7789::BacklightState::On, &mut delay::Ets)
-                    .map_err(TwatchError::from)?;
-            }
-        }
-        self.current_tile = new_tile;
-        Ok(())
+    fn commit_display(&mut self) {
+        self.display
+            .set_pixels(0, 0, 240, 240, self.frame_buffer.into_iter())
+            .unwrap();
     }
 
     pub fn run(&mut self) {
         info!("Launching main loop");
 
-        self.display
-            .set_backlight(st7789::BacklightState::Off, &mut delay::Ets)
-            .expect("Error setting off backlight");
-        let watchface_state = self
-            .get_watchface_state()
-            .expect("Unable to get watchface state");
-        let initial_tile = TwatchTiles::Watchface(watchface_state);
-        self.switch_to(initial_tile)
-            .expect("Unable to switch to watchface");
-
         loop {
             thread::sleep(Duration::from_millis(100u64));
             self.watch_loop()
-                .unwrap_or_else(|e| error!("Error displaying watchface {:?}", e));
+                .unwrap_or_else(|_e| error!("Error displaying watchface"));
         }
     }
 
     fn watch_loop(&mut self) -> Result<()> {
-        let new_state = self.get_watchface_state()?;
-        if let TwatchTiles::Watchface(current_state) = self.current_tile {
-            if !current_state.same_state(&new_state) {
-                self.switch_to(TwatchTiles::Watchface(new_state))?;
-            }
-        }
-
         self.process_touch_event()?;
 
         self.process_accel_event()?;
 
-        self.process_button_event(new_state)?;
+        self.process_button_event()?;
+
+        self.frame_buffer.clear_black();
+        tiles::time::TimeTile::new().run(self)?;
+        self.commit_display();
 
         Ok(())
     }
@@ -400,13 +355,9 @@ impl Twatch<'static> {
         Ok(())
     }
 
-    fn process_button_event(&mut self, watchface_state: WatchfaceState) -> Result<()> {
-        if let Ok(true) = self.pmu.is_button_pressed() {
-            match self.current_tile {
-                TwatchTiles::SleepMode => self.switch_to(TwatchTiles::Watchface(watchface_state)),
-                TwatchTiles::Watchface(_) => self.switch_to(TwatchTiles::SleepMode),
-                TwatchTiles::Uninitialized => Ok(()),
-            }?;
+    fn process_button_event(&mut self) -> Result<()> {
+        if self.pmu.is_button_pressed()? {
+            info!("Button pushed");
         }
         Ok(())
     }
