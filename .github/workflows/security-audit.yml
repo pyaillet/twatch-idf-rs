@@ -7,10 +7,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Nightly
-        uses: actions-rs/toolchain@v1
+      - name: Install Rust for Xtensa
+        uses: esp-rs/xtensa-toolchain@v1
         with:
-          toolchain: nightly
+          default: true
+          version: "1.59.0"
+          ldproxy: true
       - name: Security audit
         uses: actions-rs/audit-check@v1
         with:
