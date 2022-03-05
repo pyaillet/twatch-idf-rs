@@ -16,6 +16,7 @@ jobs:
           default: true
           version: "1.59.0"
           ldproxy: true
+      - run: rustup toolchain list
       - name: Release build std
         uses: actions-rs/cargo@v1
         with:
