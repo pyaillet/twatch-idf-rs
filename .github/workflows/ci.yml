@@ -26,6 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - name: Remove rust-toolchain.toml
+        run: rm rust-toolchain.toml
       - name: Install Rust for Xtensa
         uses: esp-rs/xtensa-toolchain@v1
         with:
@@ -41,6 +43,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - name: Remove rust-toolchain.toml
+        run: rm rust-toolchain.toml
 
       - name: Install Rust for Xtensa
         uses: esp-rs/xtensa-toolchain@v1
