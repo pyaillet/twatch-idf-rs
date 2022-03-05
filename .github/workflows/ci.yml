@@ -10,17 +10,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - name: Remove rust-toolchain.toml
+        run: rm rust-toolchain.toml
       - name: Install Rust for Xtensa
         uses: esp-rs/xtensa-toolchain@v1
         with:
           default: true
           ldproxy: true
-      - run: rustup toolchain list
       - name: Release build std
         uses: actions-rs/cargo@v1
         with:
           command: build
-          toolchain: nightly
 
   clippy:
     runs-on: ubuntu-latest
