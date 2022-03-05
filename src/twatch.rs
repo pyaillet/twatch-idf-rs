@@ -27,7 +27,7 @@ use display_interface_spi::SPIInterfaceNoCS;
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use embedded_graphics_framebuf::FrameBuf;
 
-use bma423::{Bma423, InterruptStatus};
+use bma423::{Bma423, FeatureInterruptStatus, Features, InterruptStatus};
 use ft6x36::Ft6x36;
 use mipidsi::Display;
 use pcf8563::PCF8563;
@@ -79,8 +79,8 @@ impl From<Infallible> for TwatchError {
     }
 }
 
-impl From<bma423::Bma423Error> for TwatchError {
-    fn from(_e: bma423::Bma423Error) -> Self {
+impl From<bma423::Error<esp_idf_hal::i2c::I2cError>> for TwatchError {
+    fn from(_e: bma423::Error<esp_idf_hal::i2c::I2cError>) -> Self {
         TwatchError::AccelError
     }
 }
@@ -282,13 +282,24 @@ impl Twatch<'static> {
 
     pub fn init_accel_irq(&mut self) -> Result<()> {
         self.accel
-            .enable_interrupt(
-                InterruptStatus::StepCounterOut
-                    | InterruptStatus::ActivityTypeOut
-                    | InterruptStatus::WristTiltOut
-                    | InterruptStatus::WakeUpOut
-                    | InterruptStatus::AnyNoMotionOut
-                    | InterruptStatus::ErrorIntOut,
+            .enable_feature(
+                Features::StepCounter
+                    | Features::StepActivity
+                    | Features::WristWear
+                    | Features::SingleTap
+                    | Features::DoubleTap,
+            )
+            .map_err(TwatchError::from)?;
+
+        self.accel
+            .map_feature_interrupt(
+                bma423::InterruptLine::Line1,
+                FeatureInterruptStatus::StepCounter
+                    | FeatureInterruptStatus::Activity
+                    | FeatureInterruptStatus::WristWear
+                    | FeatureInterruptStatus::SingleTap
+                    | FeatureInterruptStatus::DoubleTap,
+                true,
             )
             .map_err(TwatchError::from)?;
 
