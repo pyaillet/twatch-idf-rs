@@ -1,5 +1,6 @@
 #![feature(int_abs_diff)]
 mod pmu;
+mod tiles;
 mod twatch;
 mod types;
 
