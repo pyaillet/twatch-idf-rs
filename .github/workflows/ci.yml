@@ -33,10 +33,9 @@ jobs:
         with:
           default: true
           ldproxy: true
-      - name: Annotate commit with clippy warnings no_std
+      - name: Annotate commit with clippy warnings
         uses: actions-rs/clippy-check@v1
         with:
-          toolchain: nightly
           token: ${{ secrets.GITHUB_TOKEN }}
 
   security-audit:
