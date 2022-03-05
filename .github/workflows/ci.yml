@@ -14,7 +14,6 @@ jobs:
         uses: esp-rs/xtensa-toolchain@v1
         with:
           default: true
-          version: "1.59.0"
           ldproxy: true
       - run: rustup toolchain list
       - name: Release build std
@@ -31,7 +30,6 @@ jobs:
         uses: esp-rs/xtensa-toolchain@v1
         with:
           default: true
-          version: "1.59.0"
           ldproxy: true
       - name: Annotate commit with clippy warnings no_std
         uses: actions-rs/clippy-check@v1
@@ -48,7 +46,6 @@ jobs:
         uses: esp-rs/xtensa-toolchain@v1
         with:
           default: true
-          version: "1.59.0"
           ldproxy: true
       - name: Security audit
         uses: actions-rs/audit-check@v1
