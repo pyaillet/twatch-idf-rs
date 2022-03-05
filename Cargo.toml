@@ -39,15 +39,11 @@ shared-bus = { version = "^0.2", features = ["std"] }
 accelerometer = { version = "^0.12" }
 
 # drivers
-#st7789 = { version = "^0.6" }
-#st7789 = { git = "https://github.com/almindor/st7789.git" }
-#st7789 = { path = "../st7789", features = ["std"] }
-#mipidsi = { path = "../mipidsi" }
+bma423 = { git = "https://github.com/pyaillet/bma423-rs.git", features = ["accel"] }
 mipidsi = { git = "https://github.com/almindor/mipidsi.git" }
-axp20x = { path = "../axp20x-rs", features = ["std"] }
-bma423 = { path = "../bma423-rs", features = ["accel"] }
+axp20x = { git = "https://github.com/pyaillet/axp20x-rs.git" }
 pcf8563 = { version = "^0.1" }
-ft6x36 = { path = "../ft6x36-rs" }
+ft6x36 = { git = "https://github.com/pyaillet/ft6x36.git" }
 
 [build-dependencies]
 embuild = "0.28"
