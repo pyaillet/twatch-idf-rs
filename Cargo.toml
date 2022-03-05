@@ -43,7 +43,7 @@ bma423 = { git = "https://github.com/pyaillet/bma423-rs.git", features = ["accel
 mipidsi = { git = "https://github.com/almindor/mipidsi.git" }
 axp20x = { git = "https://github.com/pyaillet/axp20x-rs.git" }
 pcf8563 = { version = "^0.1" }
-ft6x36 = { git = "https://github.com/pyaillet/ft6x36.git" }
+ft6x36 = { version = "^0.1" }
 
 [build-dependencies]
 embuild = "0.28"
