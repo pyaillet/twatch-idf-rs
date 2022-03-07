@@ -10,10 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Remove rust-toolchain.toml
-        run: rm rust-toolchain.toml
       - name: Install Rust for Xtensa
-        uses: esp-rs/xtensa-toolchain@v1
+        uses: esp-rs/xtensa-toolchain@9de5c646b53804bb3d042eeae6cbd9a4fd433dd9
         with:
           default: true
           ldproxy: true
@@ -26,10 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Remove rust-toolchain.toml
-        run: rm rust-toolchain.toml
       - name: Install Rust for Xtensa
-        uses: esp-rs/xtensa-toolchain@v1
+        uses: esp-rs/xtensa-toolchain@9de5c646b53804bb3d042eeae6cbd9a4fd433dd9
         with:
           default: true
           ldproxy: true
@@ -42,11 +38,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Remove rust-toolchain.toml
-        run: rm rust-toolchain.toml
-
       - name: Install Rust for Xtensa
-        uses: esp-rs/xtensa-toolchain@v1
+        uses: esp-rs/xtensa-toolchain@9de5c646b53804bb3d042eeae6cbd9a4fd433dd9
         with:
           default: true
           ldproxy: true
