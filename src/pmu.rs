@@ -1,25 +1,8 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-
 use anyhow::Result;
 
 use esp_idf_hal::delay;
-use esp_idf_sys::{
-    self, gpio_int_type_t_GPIO_INTR_NEGEDGE, gpio_pulldown_t_GPIO_PULLDOWN_DISABLE,
-    gpio_pullup_t_GPIO_PULLUP_DISABLE, GPIO_MODE_DEF_INPUT,
-};
 
 use axp20x;
-
-static AXPXX_IRQ_TRIGGERED: AtomicBool = AtomicBool::new(false);
-
-const GPIO_INTR: u8 = 35;
-
-#[no_mangle]
-#[inline(never)]
-#[link_section = ".iram1"]
-pub extern "C" fn axpxx_irq_triggered(_: *mut esp_idf_sys::c_types::c_void) {
-    AXPXX_IRQ_TRIGGERED.store(true, std::sync::atomic::Ordering::SeqCst);
-}
 
 use crate::types::EspSharedBusI2c0;
 
@@ -27,6 +10,7 @@ pub struct Pmu<'a> {
     axp20x: axp20x::Axpxx<EspSharedBusI2c0<'a>>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub enum State {
     On,
@@ -86,39 +70,13 @@ impl Pmu<'static> {
     }
 
     pub fn is_button_pressed(&mut self) -> Result<bool> {
-        let is_irq_triggered = AXPXX_IRQ_TRIGGERED.load(Ordering::SeqCst);
-        if is_irq_triggered {
-            AXPXX_IRQ_TRIGGERED.store(false, Ordering::SeqCst);
-
-            self.axp20x
-                .read_irq()
-                .and_then(|irq| Ok(irq.intersects(axp20x::EventsIrq::PowerKeyShortPress)))
-                .map_err(|e| e.into())
-        } else {
-            Ok(false)
-        }
+        self.axp20x
+            .read_irq()
+            .and_then(|irq| Ok(irq.intersects(axp20x::EventsIrq::PowerKeyShortPress)))
+            .map_err(|e| e.into())
     }
 
     pub fn init_irq(&mut self) -> Result<()> {
-        let gpio_isr_config = esp_idf_sys::gpio_config_t {
-            mode: GPIO_MODE_DEF_INPUT,
-            pull_up_en: gpio_pullup_t_GPIO_PULLUP_DISABLE,
-            pull_down_en: gpio_pulldown_t_GPIO_PULLDOWN_DISABLE,
-            intr_type: gpio_int_type_t_GPIO_INTR_NEGEDGE,
-            pin_bit_mask: 1 << GPIO_INTR,
-        };
-        unsafe {
-            esp_idf_sys::rtc_gpio_deinit(GPIO_INTR.into());
-            esp_idf_sys::gpio_config(&gpio_isr_config);
-
-            // esp_idf_sys::gpio_install_isr_service(0);
-            esp_idf_sys::gpio_isr_handler_add(
-                GPIO_INTR.into(),
-                Some(axpxx_irq_triggered),
-                std::ptr::null_mut(),
-            );
-        }
-
         self.axp20x
             .toggle_irq(axp20x::EventsIrq::PowerKeyShortPress, true)?;
 
