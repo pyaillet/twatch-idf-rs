@@ -26,6 +26,7 @@ log = "0.4"
 # platform
 esp-idf-sys = { version = "0.30", features = ["binstart", "std"] }
 esp-idf-svc = "0.37.3"
+#esp-idf-hal = "0.32.10"
 esp-idf-hal = { git = "https://github.com/pyaillet/esp-idf-hal.git", branch = "add-isr-subscription" }
 
 # hal
