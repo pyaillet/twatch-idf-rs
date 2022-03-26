@@ -6,11 +6,13 @@ mod twatch;
 mod types;
 mod errors;
 
+use embedded_svc::event_bus::EventBus;
 use esp_idf_hal::peripherals;
 use esp_idf_svc::eventloop::EspBackgroundEventLoop;
 use esp_idf_sys::EspError;
 
 use log::*;
+use twatch::TwatchEvent;
 
 fn main() {
     let eventloop = init_esp().expect("Error initializing ESP");
@@ -21,7 +23,11 @@ fn main() {
     info!("TWatch created");
     twatch.init().expect("Error initializing TWatch");
     info!("TWatch initialized");
-    twatch.run();
+    let mut eventloop = twatch.eventloop.clone();
+    let _subscription = eventloop.subscribe(move |event: &TwatchEvent| twatch.process_event(event));
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(5_000));
+    }
 }
 
 fn init_esp() -> Result<EspBackgroundEventLoop, EspError> {
@@ -39,7 +45,7 @@ fn init_esp() -> Result<EspBackgroundEventLoop, EspError> {
     let sys_loop_stack = Arc::new(EspSysLoopStack::new()?);
     #[allow(unused)]
     let default_nvs = Arc::new(EspDefaultNvs::new()?);
-    
+
     info!("About to start a background event loop");
     let eventloop = EspBackgroundEventLoop::new(&Default::default())?;
 

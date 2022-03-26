@@ -1,12 +1,29 @@
+use core::time::Duration;
+
+use embedded_svc::sys_time::SystemTime;
+
 use esp_idf_svc::eventloop::*;
 use esp_idf_sys::c_types;
 
+#[derive(Copy, Clone, Debug)]
+pub struct TwatchEvent {
+    pub time: Duration,
+    pub kind: Kind
+}
+
+impl TwatchEvent {
+    pub fn new(kind: Kind) -> Self {
+        let time = (esp_idf_svc::systime::EspSystemTime {}).now();
+        TwatchEvent { time, kind }
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]
-pub enum TwatchEvent {
+pub enum Kind {
     RtcEvent,
     AcceleratorEvent,
-    RawTouchEvent,
+    TouchEvent,
     PowerButtonShortPressed
 }
 
