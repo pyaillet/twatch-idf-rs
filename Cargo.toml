@@ -26,8 +26,7 @@ log = "0.4"
 # platform
 esp-idf-sys = { version = "0.30", features = ["binstart", "std"] }
 esp-idf-svc = "0.37.3"
-#esp-idf-hal = "0.32.10"
-esp-idf-hal = { path = "../../esp-idf-hal/" }
+esp-idf-hal = { git = "https://github.com/pyaillet/esp-idf-hal.git", branch = "add-isr-subscription" }
 
 # hal
 embedded-svc = "0.17.4"
@@ -45,8 +44,7 @@ bma423 = { git = "https://github.com/pyaillet/bma423-rs.git", features = ["accel
 mipidsi = { git = "https://github.com/almindor/mipidsi.git" }
 axp20x = { git = "https://github.com/pyaillet/axp20x-rs.git" }
 pcf8563 = { version = "^0.1" }
-#ft6x36 = { version = "^0.1" }
-ft6x36 = { path = "../ft6x36-rs/" }
+ft6x36 = { version = "^0.2" }
 
 [build-dependencies]
 embuild = "0.28"
