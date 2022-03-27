@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use embedded_hal_0_2::digital::v2::OutputPin;
 use esp_idf_hal::{
     delay,
@@ -121,9 +123,10 @@ impl Twatch<'static> {
         let rtc_irq = unsafe {
             rtc_irq.into_subscribed(
                 move || {
-                    rtc_eventloop
-                        .post(&TwatchEvent::new(Kind::RtcEvent), None)
-                        .unwrap();
+                    let _ = rtc_eventloop.post(
+                        &TwatchEvent::new(Kind::RtcEvent),
+                        Some(Duration::from_millis(0)),
+                    );
                 },
                 InterruptType::NegEdge,
             )
@@ -136,8 +139,10 @@ impl Twatch<'static> {
         let pmu_irq_pin = unsafe {
             pmu_irq_pin.into_subscribed(
                 move || {
-                    let _ =
-                        pmu_eventloop.post(&TwatchEvent::new(Kind::PowerButtonShortPressed), None);
+                    let _ = pmu_eventloop.post(
+                        &TwatchEvent::new(Kind::PmuEvent),
+                        Some(Duration::from_millis(0)),
+                    );
                 },
                 InterruptType::NegEdge,
             )
@@ -150,7 +155,10 @@ impl Twatch<'static> {
         let accel_irq = unsafe {
             accel_irq.into_subscribed(
                 move || {
-                    let _ = accel_eventloop.post(&TwatchEvent::new(Kind::AcceleratorEvent), None);
+                    let _ = accel_eventloop.post(
+                        &TwatchEvent::new(Kind::AcceleratorEvent),
+                        Some(Duration::from_millis(0)),
+                    );
                 },
                 InterruptType::NegEdge,
             )
@@ -171,7 +179,10 @@ impl Twatch<'static> {
         let touch_irq = unsafe {
             touch_irq.into_subscribed(
                 move || {
-                    let _ = touch_eventloop.post(&TwatchEvent::new(Kind::TouchEvent), None);
+                    let _ = touch_eventloop.post(
+                        &TwatchEvent::new(Kind::TouchEvent),
+                        Some(Duration::from_millis(0)),
+                    );
                 },
                 InterruptType::NegEdge,
             )
@@ -235,19 +246,21 @@ impl Twatch<'static> {
     pub fn process_event(&mut self, event: &TwatchEvent) {
         match (event.time, event.kind) {
             (time, Kind::TouchEvent) => {
-                self.touch_screen
+                let touch_event = self
+                    .touch_screen
                     .get_touch_event()
-                    .map(|e| {
-                        if e.p1.is_some() {
-                            // self.touch_events.lock().push((time, e));
-                            info!("[{:?}] - Touch event: {:?}", time, e)
-                        }
-                    })
-                    .unwrap();
+                    .map(|touch_event| self.touch_screen.process_event(time, touch_event)).unwrap();
+                if touch_event.is_some() {
+                    info!("[{:?}] - Qualified touch event {:?}", time, touch_event);
+                }
             }
             (_time, Kind::AcceleratorEvent) => info!("AcceleratorEvent"),
-            (time, Kind::PowerButtonShortPressed) => {
-                info!("[{:?}] - Power button: {:?}", time, self.pmu.is_button_pressed())
+            (time, Kind::PmuEvent) => {
+                info!(
+                    "[{:?}] - Power button: {:?}",
+                    time,
+                    self.pmu.is_button_pressed()
+                )
             }
             (_time, Kind::RtcEvent) => info!("Rtc Event"),
         }

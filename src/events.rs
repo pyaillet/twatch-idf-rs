@@ -24,7 +24,7 @@ pub enum Kind {
     RtcEvent,
     AcceleratorEvent,
     TouchEvent,
-    PowerButtonShortPressed
+    PmuEvent,
 }
 
 impl EspTypedEventSource for TwatchEvent {
