@@ -49,7 +49,7 @@ pub struct Twatch<'a> {
 }
 
 impl Twatch<'static> {
-    pub fn new(peripherals: Peripherals, eventloop: EspBackgroundNotify) -> Self {
+    pub fn new(peripherals: Peripherals, mut eventloop: EspBackgroundNotify) -> Self {
         let pins = peripherals.pins;
         let mut backlight = pins
             .gpio12
@@ -168,11 +168,10 @@ impl Twatch<'static> {
 
         let touch_screen = Ft6x36::new(i2c1);
         let touch_irq = pins.gpio38.into_input().unwrap();
-        let mut touch_eventloop = eventloop.clone();
         let touch_irq = unsafe {
             touch_irq.into_subscribed(
                 move || {
-                    let _ = touch_eventloop.post(
+                    let _ = eventloop.post(
                         &TwatchRawEvent::Touch.into(),
                         Some(Duration::from_millis(0)),
                     );
@@ -256,18 +255,12 @@ impl Twatch<'static> {
     fn process_raw_event(&mut self, raw_event: TwatchRawEvent) -> Option<TwatchEvent> {
         let time = esp_idf_svc::systime::EspSystemTime {}.now();
         match raw_event {
-            TwatchRawEvent::Touch => {
-                if let Some(touch_event) = self
-                    .touch_screen
-                    .get_touch_event()
-                    .ok()
-                    .and_then(|touch_event| self.touch_screen.process_event(time, touch_event))
-                {
-                    Some(TwatchEvent::new(Kind::Touch(touch_event)))
-                } else {
-                    None
-                }
-            }
+            TwatchRawEvent::Touch => self
+                .touch_screen
+                .get_touch_event()
+                .ok()
+                .and_then(|touch_event| self.touch_screen.process_event(time, touch_event))
+                .map(|touch_event| TwatchEvent::new(Kind::Touch(touch_event))),
             TwatchRawEvent::Accel => {
                 info!("AccelEvent");
                 None
