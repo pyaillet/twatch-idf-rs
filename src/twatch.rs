@@ -14,8 +14,8 @@ use anyhow::Result;
 
 use log::*;
 
-use embedded_svc::event_bus::Postbox;
-use esp_idf_svc::eventloop::EspBackgroundEventLoop;
+use embedded_svc::{event_bus::Postbox, sys_time::SystemTime};
+use esp_idf_svc::notify::EspBackgroundNotify;
 
 use display_interface_spi::SPIInterfaceNoCS;
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
@@ -26,11 +26,8 @@ use ft6x36::Ft6x36;
 use mipidsi::Display;
 use pcf8563::PCF8563;
 
-use crate::types::*;
-use crate::{
-    pmu::Pmu,
-    tiles::{self, WatchTile},
-};
+use crate::{errors, pmu::State, types::*};
+use crate::{pmu::Pmu, tiles};
 
 pub use crate::errors::*;
 pub use crate::events::*;
@@ -48,11 +45,11 @@ pub struct Twatch<'a> {
     pub accel_irq: gpio::Gpio39<SubscribedInput>,
     pub touch_screen: Ft6x36<EspI2c1>,
     pub touch_irq: gpio::Gpio38<SubscribedInput>,
-    pub eventloop: EspBackgroundEventLoop,
+    pub current_tile: tiles::Tile,
 }
 
 impl Twatch<'static> {
-    pub fn new(peripherals: Peripherals, eventloop: EspBackgroundEventLoop) -> Self {
+    pub fn new(peripherals: Peripherals, eventloop: EspBackgroundNotify) -> Self {
         let pins = peripherals.pins;
         let mut backlight = pins
             .gpio12
@@ -123,10 +120,8 @@ impl Twatch<'static> {
         let rtc_irq = unsafe {
             rtc_irq.into_subscribed(
                 move || {
-                    let _ = rtc_eventloop.post(
-                        &TwatchEvent::new(Kind::RtcEvent),
-                        Some(Duration::from_millis(0)),
-                    );
+                    let _ = rtc_eventloop
+                        .post(&TwatchRawEvent::Rtc.into(), Some(Duration::from_millis(0)));
                 },
                 InterruptType::NegEdge,
             )
@@ -139,10 +134,8 @@ impl Twatch<'static> {
         let pmu_irq_pin = unsafe {
             pmu_irq_pin.into_subscribed(
                 move || {
-                    let _ = pmu_eventloop.post(
-                        &TwatchEvent::new(Kind::PmuEvent),
-                        Some(Duration::from_millis(0)),
-                    );
+                    let _ = pmu_eventloop
+                        .post(&TwatchRawEvent::Pmu.into(), Some(Duration::from_millis(0)));
                 },
                 InterruptType::NegEdge,
             )
@@ -156,7 +149,7 @@ impl Twatch<'static> {
             accel_irq.into_subscribed(
                 move || {
                     let _ = accel_eventloop.post(
-                        &TwatchEvent::new(Kind::AcceleratorEvent),
+                        &TwatchRawEvent::Accel.into(),
                         Some(Duration::from_millis(0)),
                     );
                 },
@@ -180,7 +173,7 @@ impl Twatch<'static> {
             touch_irq.into_subscribed(
                 move || {
                     let _ = touch_eventloop.post(
-                        &TwatchEvent::new(Kind::TouchEvent),
+                        &TwatchRawEvent::Touch.into(),
                         Some(Duration::from_millis(0)),
                     );
                 },
@@ -202,7 +195,7 @@ impl Twatch<'static> {
             accel_irq,
             touch_screen,
             touch_irq,
-            eventloop,
+            current_tile: tiles::Tile::Time,
         }
     }
 
@@ -237,32 +230,76 @@ impl Twatch<'static> {
         Ok(())
     }
 
-    fn commit_display(&mut self) {
-        self.display
-            .set_pixels(0, 0, 240, 240, self.frame_buffer.into_iter())
-            .unwrap();
+    pub fn light_sleep(&mut self) -> Result<()> {
+        self.backlight.set_low()?;
+        self.pmu.set_power_output(State::Off)?;
+        Ok(())
     }
 
-    pub fn process_event(&mut self, event: &TwatchEvent) {
-        match (event.time, event.kind) {
-            (time, Kind::TouchEvent) => {
-                let touch_event = self
+    pub fn deep_sleep(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    pub fn wake_up(&mut self) -> Result<()> {
+        self.backlight.set_high()?;
+        self.pmu.set_power_output(State::On)?;
+        Ok(())
+    }
+
+    pub fn commit_display(&mut self) -> Result<()> {
+        self.display
+            .set_pixels(0, 0, 240, 240, self.frame_buffer.into_iter())
+            .map_err(|_| errors::TwatchError::Display)?;
+        Ok(())
+    }
+
+    fn process_raw_event(&mut self, raw_event: TwatchRawEvent) -> Option<TwatchEvent> {
+        let time = esp_idf_svc::systime::EspSystemTime {}.now();
+        match raw_event {
+            TwatchRawEvent::Touch => {
+                if let Some(touch_event) = self
                     .touch_screen
                     .get_touch_event()
-                    .map(|touch_event| self.touch_screen.process_event(time, touch_event)).unwrap();
-                if touch_event.is_some() {
-                    info!("[{:?}] - Qualified touch event {:?}", time, touch_event);
+                    .ok()
+                    .and_then(|touch_event| self.touch_screen.process_event(time, touch_event))
+                {
+                    Some(TwatchEvent::new(Kind::Touch(touch_event)))
+                } else {
+                    None
                 }
             }
-            (_time, Kind::AcceleratorEvent) => info!("AcceleratorEvent"),
-            (time, Kind::PmuEvent) => {
-                info!(
-                    "[{:?}] - Power button: {:?}",
-                    time,
-                    self.pmu.is_button_pressed()
-                )
+            TwatchRawEvent::Accel => {
+                info!("AccelEvent");
+                None
             }
-            (_time, Kind::RtcEvent) => info!("Rtc Event"),
+            TwatchRawEvent::Pmu => {
+                if let Ok(true) = self.pmu.is_button_pressed() {
+                    Some(TwatchEvent::new(Kind::PmuButtonPressed))
+                } else {
+                    None
+                }
+            }
+            TwatchRawEvent::Rtc => {
+                info!("Rtc Event");
+                None
+            }
+            _ => {
+                warn!("Unhandled event");
+                None
+            }
         }
+    }
+
+    pub fn process_event(&mut self, raw_event: TwatchRawEvent) {
+        let tile = self.current_tile.get();
+        let _ = self.process_raw_event(raw_event).map(move |event| {
+            tile.process_event(self, &event);
+        });
+    }
+
+    pub fn run(&mut self) -> Result<()> {
+        let tile = self.current_tile.get();
+        tile.run(self)?;
+        Ok(())
     }
 }

@@ -2,13 +2,25 @@ use core::time::Duration;
 
 use embedded_svc::sys_time::SystemTime;
 
-use esp_idf_svc::eventloop::*;
-use esp_idf_sys::c_types;
+use ft6x36::TouchEvent;
+use num_enum::{FromPrimitive, IntoPrimitive};
+
+#[repr(u32)]
+#[derive(Copy, Clone, Debug, FromPrimitive, IntoPrimitive)]
+pub enum TwatchRawEvent {
+    Rtc = 1 << 0,
+    Timer = 1 << 1,
+    Touch = 1 << 2,
+    Pmu = 1 << 3,
+    Accel = 1 << 4,
+    #[default]
+    Unknown = 1 << 31,
+}
 
 #[derive(Copy, Clone, Debug)]
 pub struct TwatchEvent {
     pub time: Duration,
-    pub kind: Kind
+    pub kind: Kind,
 }
 
 impl TwatchEvent {
@@ -21,32 +33,8 @@ impl TwatchEvent {
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]
 pub enum Kind {
-    RtcEvent,
-    AcceleratorEvent,
-    TouchEvent,
-    PmuEvent,
-}
-
-impl EspTypedEventSource for TwatchEvent {
-    fn source() -> *const c_types::c_char {
-        b"TWATCH_EVENT\0".as_ptr() as *const _
-    }
-}
-
-impl EspTypedEventSerializer<TwatchEvent> for TwatchEvent {
-    fn serialize<R>(
-        event: &TwatchEvent,
-        f: impl for<'a> FnOnce(&'a EspEventPostData) -> R,
-    ) -> R {
-        f(&unsafe { EspEventPostData::new(Self::source(), Self::event_id(), event) })
-    }
-}
-
-impl EspTypedEventDeserializer<TwatchEvent> for TwatchEvent {
-    fn deserialize<R>(
-        data: &EspEventFetchData,
-        f: &mut impl for<'a> FnMut(&'a TwatchEvent) -> R,
-    ) -> R {
-        f(unsafe { data.as_payload() })
-    }
+    TimerRtc,
+    Accel,
+    Touch(TouchEvent),
+    PmuButtonPressed,
 }

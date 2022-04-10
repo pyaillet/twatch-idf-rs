@@ -21,16 +21,16 @@ native = ["esp-idf-sys/native"]
 anyhow = {version = "1", features = ["backtrace"]}
 mutex-trait = { version = "0.2" }
 bitmask-enum = { version = "1.1" }
+num_enum = { version = "0.5" }
 log = "0.4"
 
 # platform
-esp-idf-sys = { version = "0.30", features = ["binstart", "std"] }
-esp-idf-svc = "0.37.3"
-#esp-idf-hal = "0.32.10"
-esp-idf-hal = { git = "https://github.com/pyaillet/esp-idf-hal.git", branch = "add-isr-subscription" }
+esp-idf-sys = { version = "^0.31", features = ["binstart", "std", "native"] }
+esp-idf-svc = { version = "^0.39", features = ["experimental"] }
+esp-idf-hal = "^0.35"
 
 # hal
-embedded-svc = "0.17.4"
+embedded-svc = "^0.19"
 embedded-hal = "=1.0.0-alpha.7"
 embedded-hal-0-2 = { package = "embedded-hal", version = "0.2", features = ["unproven"] }
 embedded-graphics = { version = "^0.7" }

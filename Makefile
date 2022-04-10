@@ -1,5 +1,3 @@
-DEVICE=/dev/cu.usbserial-0236B9E6
-
 help: ## Show this help.
 	@echo 'usage: make [target] ...'
 	@echo
@@ -16,15 +14,15 @@ release: ## Make sure we can release this.
 
 .PHONY: flash-debug
 flash-debug: debug ## Flash the debug firmware.
-	espflash $(DEVICE) target/xtensa-esp32-espidf/debug/twatch-idf-rs
+	cargo espflash
 
 .PHONY: flash
 flash: release ## Flash the release firmware.
-	espflash $(DEVICE) target/xtensa-esp32-espidf/release/twatch-idf-rs
+	cargo espflash
 
 .PHONY: monitor
-monitor: flash-debug ## Monitor the device (default).
-	espmonitor $(DEVICE)
+monitor: ## Monitor the device (default).
+	cargo espflash --monitor
 
 .PHONY: clean
 clean: ## Clean up the build.
