@@ -2,8 +2,6 @@ use anyhow::Result;
 
 use esp_idf_hal::delay;
 
-use axp20x;
-
 use crate::types::EspSharedBusI2c0;
 
 pub struct Pmu<'a> {
@@ -72,7 +70,7 @@ impl Pmu<'static> {
     pub fn is_button_pressed(&mut self) -> Result<bool> {
         self.axp20x
             .read_irq()
-            .and_then(|irq| Ok(irq.intersects(axp20x::EventsIrq::PowerKeyShortPress)))
+            .map(|irq| irq.intersects(axp20x::EventsIrq::PowerKeyShortPress))
             .map_err(|e| e.into())
     }
 

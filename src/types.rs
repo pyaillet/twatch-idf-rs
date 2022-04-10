@@ -4,7 +4,6 @@ use esp_idf_hal::{
 };
 
 use display_interface_spi::SPIInterfaceNoCS;
-use shared_bus;
 
 pub type EspSpi2InterfaceNoCS = SPIInterfaceNoCS<
     spi::Master<

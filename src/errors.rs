@@ -1,10 +1,10 @@
 #[derive(Debug)]
 pub enum TwatchError {
-    ClockError,
-    DisplayError,
-    PmuError,
-    I2cError,
-    AccelError,
+    Clock,
+    Display,
+    Pmu,
+    I2c,
+    Accel,
 }
 
 impl std::fmt::Display for TwatchError {
@@ -17,37 +17,37 @@ impl std::error::Error for TwatchError {}
 
 impl From<axp20x::AxpError<esp_idf_hal::i2c::I2cError>> for TwatchError {
     fn from(_e: axp20x::AxpError<esp_idf_hal::i2c::I2cError>) -> Self {
-        TwatchError::PmuError
+        TwatchError::Pmu
     }
 }
 
 impl From<esp_idf_hal::i2c::I2cError> for TwatchError {
     fn from(_e: esp_idf_hal::i2c::I2cError) -> Self {
-        TwatchError::I2cError
+        TwatchError::I2c
     }
 }
 
 impl From<mipidsi::Error<std::convert::Infallible>> for TwatchError {
     fn from(_e: mipidsi::Error<std::convert::Infallible>) -> Self {
-        TwatchError::DisplayError
+        TwatchError::Display
     }
 }
 
 impl From<std::convert::Infallible> for TwatchError {
     fn from(_e: std::convert::Infallible) -> Self {
-        TwatchError::DisplayError
+        TwatchError::Display
     }
 }
 
 impl From<bma423::Error<esp_idf_hal::i2c::I2cError>> for TwatchError {
     fn from(_e: bma423::Error<esp_idf_hal::i2c::I2cError>) -> Self {
-        TwatchError::AccelError
+        TwatchError::Accel
     }
 }
 
 impl From<pcf8563::Error<esp_idf_hal::i2c::I2cError>> for TwatchError {
     fn from(_e: pcf8563::Error<esp_idf_hal::i2c::I2cError>) -> Self {
-        TwatchError::ClockError
+        TwatchError::Clock
     }
 }
 
