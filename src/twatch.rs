@@ -10,6 +10,8 @@ use esp_idf_hal::{
     spi,
 };
 
+use esp_idf_sys::esp;
+
 use anyhow::Result;
 
 use log::*;
@@ -18,26 +20,21 @@ use embedded_svc::{event_bus::Postbox, sys_time::SystemTime};
 use esp_idf_svc::notify::EspBackgroundNotify;
 
 use display_interface_spi::SPIInterfaceNoCS;
-use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
-use embedded_graphics_framebuf::FrameBuf;
 
 use bma423::Bma423;
 use ft6x36::Ft6x36;
-use mipidsi::Display;
 use pcf8563::PCF8563;
 
-use crate::{errors, pmu::State, types::*};
-use crate::{pmu::Pmu, tiles};
+use crate::{display::TwatchDisplay, pmu::Pmu, tiles};
+use crate::{pmu::State, types::*};
 
 pub use crate::errors::*;
 pub use crate::events::*;
 
-pub struct Twatch<'a> {
+pub struct Hal<'a> {
     pub pmu: Pmu<'a>,
     pub pmu_irq_pin: gpio::Gpio35<SubscribedInput>,
-    pub display: Display<EspSpi2InterfaceNoCS, mipidsi::NoPin, mipidsi::models::ST7789>,
-    pub frame_buffer: &'a mut FrameBuf<Rgb565, 240_usize, 240_usize>,
-    pub backlight: gpio::Gpio12<Output>,
+    pub display: TwatchDisplay<'a>,
     pub motor: gpio::Gpio4<Output>,
     pub clock: PCF8563<EspSharedBusI2c0<'a>>,
     pub rtc_irq: gpio::Gpio37<SubscribedInput>,
@@ -45,13 +42,17 @@ pub struct Twatch<'a> {
     pub accel_irq: gpio::Gpio39<SubscribedInput>,
     pub touch_screen: Ft6x36<EspI2c1>,
     pub touch_irq: gpio::Gpio38<SubscribedInput>,
+}
+
+pub struct Twatch<'a> {
+    pub hal: Hal<'a>,
     pub current_tile: tiles::Tile,
 }
 
 impl Twatch<'static> {
     pub fn new(peripherals: Peripherals, mut eventloop: EspBackgroundNotify) -> Self {
         let pins = peripherals.pins;
-        let mut backlight = pins
+        let backlight = pins
             .gpio12
             .into_output()
             .expect("Error setting gpio12 to output");
@@ -90,13 +91,9 @@ impl Twatch<'static> {
         .expect("Error initializing SPI");
         info!("SPI Initialized");
         let di = SPIInterfaceNoCS::new(spi, dc.into_output().expect("Error setting dc to output"));
-        let display = Display::st7789_without_rst(di);
         info!("Display Initialized");
-        backlight.set_high().unwrap();
 
-        static mut FBUFF: FrameBuf<Rgb565, 240_usize, 240_usize> =
-            FrameBuf([[embedded_graphics::pixelcolor::Rgb565::BLACK; 240]; 240]);
-        let frame_buffer = unsafe { &mut FBUFF };
+        let display = TwatchDisplay::new(di, backlight).unwrap();
 
         let motor = pins.gpio4.into_output().unwrap();
 
@@ -181,12 +178,10 @@ impl Twatch<'static> {
         }
         .unwrap();
 
-        Self {
+        let hal = Hal {
             pmu,
             pmu_irq_pin,
             display,
-            frame_buffer,
-            backlight,
             motor,
             clock,
             rtc_irq,
@@ -194,30 +189,37 @@ impl Twatch<'static> {
             accel_irq,
             touch_screen,
             touch_irq,
+        };
+
+        Twatch {
+            hal,
             current_tile: tiles::Tile::Time,
         }
     }
 
     pub fn init(&mut self) -> Result<()> {
-        self.pmu.init()?;
+        self.hal.pmu.init()?;
 
-        self.display
-            .init(&mut delay::Ets)
-            .map_err(TwatchError::from)?;
+        self.hal.display.init(&mut delay::Ets)?;
 
-        self.touch_screen.init().map_err(TwatchError::from)?;
-        match self.touch_screen.get_info() {
+        self.hal.pmu.set_screen_power(State::On)?;
+        self.hal.display.set_display_on()?;
+
+        self.hal.touch_screen.init().map_err(TwatchError::from)?;
+        match self.hal.touch_screen.get_info() {
             Some(info) => info!("Touch screen info: {info:?}"),
             None => warn!("No info"),
         }
 
-        self.accel
+        self.hal
+            .accel
             .init(&mut delay::Ets)
             .map_err(TwatchError::from)?;
-        let chip_id = self.accel.get_chip_id().map_err(TwatchError::from)?;
+        let chip_id = self.hal.accel.get_chip_id().map_err(TwatchError::from)?;
         info!("BMA423 chip id: {}", chip_id as u8);
 
-        self.accel
+        self.hal
+            .accel
             .set_accel_config(
                 bma423::AccelConfigOdr::Odr100,
                 bma423::AccelConfigBandwidth::NormAvg4,
@@ -229,44 +231,22 @@ impl Twatch<'static> {
         Ok(())
     }
 
-    pub fn light_sleep(&mut self) -> Result<()> {
-        self.backlight.set_low()?;
-        self.pmu.set_power_output(State::Off)?;
-        Ok(())
-    }
-
-    pub fn deep_sleep(&mut self) -> Result<()> {
-        Ok(())
-    }
-
-    pub fn wake_up(&mut self) -> Result<()> {
-        self.backlight.set_high()?;
-        self.pmu.set_power_output(State::On)?;
-        Ok(())
-    }
-
-    pub fn commit_display(&mut self) -> Result<()> {
-        self.display
-            .set_pixels(0, 0, 240, 240, self.frame_buffer.into_iter())
-            .map_err(|_| errors::TwatchError::Display)?;
-        Ok(())
-    }
-
     fn process_raw_event(&mut self, raw_event: TwatchRawEvent) -> Option<TwatchEvent> {
         let time = esp_idf_svc::systime::EspSystemTime {}.now();
         match raw_event {
             TwatchRawEvent::Touch => self
+                .hal
                 .touch_screen
                 .get_touch_event()
                 .ok()
-                .and_then(|touch_event| self.touch_screen.process_event(time, touch_event))
+                .and_then(|touch_event| self.hal.touch_screen.process_event(time, touch_event))
                 .map(|touch_event| TwatchEvent::new(Kind::Touch(touch_event))),
             TwatchRawEvent::Accel => {
                 info!("AccelEvent");
                 None
             }
             TwatchRawEvent::Pmu => {
-                if let Ok(true) = self.pmu.is_button_pressed() {
+                if let Ok(true) = self.hal.pmu.is_button_pressed() {
                     Some(TwatchEvent::new(Kind::PmuButtonPressed))
                 } else {
                     None
@@ -292,7 +272,43 @@ impl Twatch<'static> {
 
     pub fn run(&mut self) -> Result<()> {
         let tile = self.current_tile.get();
-        tile.run(self)?;
+        tile.run(&mut self.hal)?;
+        Ok(())
+    }
+}
+
+impl Hal<'static> {
+    pub fn light_sleep(&mut self) -> Result<()> {
+        self.display.set_display_off()?;
+        self.pmu.set_screen_power(State::Off)?;
+
+        self.pmu.set_audio_power(State::Off)?;
+
+        Ok(())
+    }
+
+    pub fn deep_sleep(&mut self) -> Result<()> {
+        self.display.set_display_off()?;
+        self.pmu.set_screen_power(State::Off)?;
+
+        self.pmu.set_audio_power(State::Off)?;
+
+        esp!(unsafe {
+            esp_idf_sys::esp_sleep_enable_ext0_wakeup(esp_idf_sys::gpio_num_t_GPIO_NUM_35, 0)
+        })?;
+
+        self.motor.set_low()?;
+        esp!(unsafe { esp_idf_sys::rtc_gpio_isolate(esp_idf_sys::gpio_num_t_GPIO_NUM_4) })?;
+
+        unsafe {
+            esp_idf_sys::esp_deep_sleep_start();
+        }
+        Ok(())
+    }
+
+    pub fn wake_up(&mut self) -> Result<()> {
+        self.display.set_display_on()?;
+        self.pmu.set_screen_power(State::On)?;
         Ok(())
     }
 }

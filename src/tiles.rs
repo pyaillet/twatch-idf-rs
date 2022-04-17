@@ -3,7 +3,7 @@ pub(crate) mod time;
 
 use anyhow::Result;
 
-use crate::{twatch::Twatch, events::TwatchEvent};
+use crate::{twatch::{Twatch, Hal}, events::TwatchEvent};
 
 #[derive(Copy, Clone)]
 pub enum Tile {
@@ -27,7 +27,7 @@ impl Default for Tile {
 }
 
 pub trait WatchTile {
-    fn run(&self, twatch: &mut Twatch<'static>) -> Result<()>;
+    fn run(&self, hal: &mut Hal<'static>) -> Result<()>;
 
     fn process_event<'a>(&self, twatch: &mut Twatch<'static>, event: &'a TwatchEvent) -> Option<&'a TwatchEvent>;
 }

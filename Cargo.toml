@@ -33,6 +33,7 @@ esp-idf-hal = "^0.35"
 embedded-svc = "^0.19"
 embedded-hal = "=1.0.0-alpha.7"
 embedded-hal-0-2 = { package = "embedded-hal", version = "0.2", features = ["unproven"] }
+embedded-graphics-core = { version = "^0.3" }
 embedded-graphics = { version = "^0.7" }
 embedded-graphics-framebuf = "0.0.2"
 profont = { version = "^0.5" }

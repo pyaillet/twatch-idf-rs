@@ -1,5 +1,6 @@
 mod events;
 mod pmu;
+mod display;
 mod tiles;
 mod twatch;
 mod types;
