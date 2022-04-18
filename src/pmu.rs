@@ -15,9 +15,9 @@ pub enum State {
     Off,
 }
 
-impl Into<axp20x::PowerState> for State {
-    fn into(self) -> axp20x::PowerState {
-        match self {
+impl From<State> for axp20x::PowerState {
+    fn from(state: State) -> Self {
+        match state {
             State::On => axp20x::PowerState::On,
             State::Off => axp20x::PowerState::Off,
         }
@@ -74,6 +74,7 @@ impl Pmu<'static> {
         Ok(())
     }
 
+    #[allow(clippy::wrong_self_convention)]
     pub fn is_button_pressed(&mut self) -> Result<bool> {
         self.axp20x
             .read_irq()

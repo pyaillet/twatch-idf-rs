@@ -9,8 +9,6 @@ use embedded_hal_0_2::digital::v2::OutputPin;
 use esp_idf_hal::gpio::{self, Output};
 use mipidsi::Display;
 
-use crate::errors;
-
 pub use crate::errors::*;
 use crate::types::EspSpi2InterfaceNoCS;
 
@@ -30,8 +28,8 @@ impl<'a> DrawTarget for TwatchDisplay<'a> {
         I: IntoIterator<Item = Pixel<Self::Color>>,
     {
         self.frame_buffer
-            .draw_iter(pixels)
-            .map_err(|_| TwatchError::Display)
+           .draw_iter(pixels)
+           .map_err(|_| TwatchError::Display)
     }
 }
 
@@ -39,7 +37,7 @@ impl<'a> OriginDimensions for TwatchDisplay<'a> {
     fn size(&self) -> Size {
         Size {
             width: 240,
-            height: 240
+            height: 240,
         }
     }
 }
@@ -70,7 +68,8 @@ impl TwatchDisplay<'static> {
     pub fn commit_display(&mut self) -> Result<()> {
         self.display
             .set_pixels(0, 0, 240, 240, self.frame_buffer.into_iter())
-            .map_err(|_| errors::TwatchError::Display)?;
+            .map_err(|_| TwatchError::Display)?;
+        self.frame_buffer.clear_black();
         Ok(())
     }
 

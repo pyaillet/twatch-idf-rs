@@ -50,5 +50,3 @@ impl From<pcf8563::Error<esp_idf_hal::i2c::I2cError>> for TwatchError {
         TwatchError::Clock
     }
 }
-
-

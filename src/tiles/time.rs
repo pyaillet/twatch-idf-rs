@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use accelerometer::vector::F32x3;
 use anyhow::Result;
 
 use ft6x36::TouchEvent;
@@ -18,61 +19,60 @@ use accelerometer::Accelerometer;
 
 use crate::events::{Kind, TwatchEvent};
 use crate::tiles::WatchTile;
-use crate::twatch::{Hal, Twatch};
+use crate::twatch::Hal;
 
-#[derive(Default)]
-pub struct TimeTile {}
+#[derive(Copy, Clone, Debug)]
+pub struct TimeTile {
+    battery_level: f32,
+    time: DateTime,
+    accel: F32x3,
+}
+
+impl Default for TimeTile {
+    fn default() -> Self {
+        Self {
+            battery_level: 0.0,
+            time: DateTime {
+                year: 0,
+                month: 0,
+                day: 0,
+                weekday: 0,
+                hours: 0,
+                minutes: 0,
+                seconds: 0,
+            },
+            accel: F32x3::default(),
+        }
+    }
+}
+
+unsafe impl Send for TimeTile {}
 
 impl WatchTile for TimeTile {
-    fn run(&self, hal: &mut Hal<'static>) -> Result<()> {
-        let style = MonoTextStyle::new(&PROFONT_24_POINT, Rgb565::WHITE);
-        let small_style = MonoTextStyle::new(&PROFONT_9_POINT, Rgb565::WHITE);
-
-        let battery_level = hal.pmu.get_battery_percentage()?;
-        let battery_level = format!("Bat: {:>3}%", battery_level.round());
-        Text::new(&battery_level, Point::new(30, 60), style).draw(&mut hal.display)?;
-
-        let time = hal.clock.get_datetime().unwrap_or_else(|_e| {
-            warn!("Error getting time");
-            DateTime {
-                year: 0, month: 0, day: 0, weekday:0, hours: 0, minutes: 0, seconds: 0
-            }
-        });
-        let time = format!("{:02}:{:02}:{:02}", time.hours, time.minutes, time.seconds);
-        Text::new(&time, Point::new(30, 30), style).draw(&mut hal.display)?;
-
-        match hal.accel.accel_norm() {
-            Ok(f32x3) => {
-                let accel = format!("x:{:.2} y:{:.2} z:{:.2}", f32x3.x, f32x3.y, f32x3.z);
-                Text::new(&accel, Point::new(30, 90), small_style).draw(&mut hal.display)?;
-            }
-            Err(e) => {
-                error!("Error getting accel values");
-                error!("{:?}", e);
-            }
-        }
+    fn run(&mut self, hal: &mut Hal<'static>) -> Result<()> {
+        self.update_state(hal);
+        self.display_tile(hal)?;
         hal.display.commit_display()?;
 
         Ok(())
     }
 
-    fn process_event<'a>(
-        &self,
-        twatch: &mut Twatch<'static>,
-        event: &'a crate::events::TwatchEvent,
-    ) -> Option<&'a TwatchEvent> {
-        match (event.time, event.kind) {
+    fn process_event(
+        &mut self,
+        hal: &mut Hal<'static>,
+        event: crate::events::TwatchEvent,
+    ) -> Option<TwatchEvent> {
+        match (&event.time, &event.kind) {
             (_, Kind::PmuButtonPressed) => {
-                twatch
-                    .hal
-                    .light_sleep()
+                hal.light_sleep()
                     .unwrap_or_else(|e| warn!("Error going to light sleep: {}", e));
-                twatch.current_tile = crate::tiles::Tile::Sleep;
-                None
+                let tile = Box::new(crate::tiles::sleep::SleepTile::default());
+                let event = TwatchEvent::new(Kind::NewTile(tile));
+                Some(event)
             }
             (_, Kind::Touch(TouchEvent::Swipe(dir, _info))) => {
                 let _ = self
-                    .display_swipe(twatch, dir)
+                    .display_swipe(hal, *dir)
                     .map_err(|e| warn!("Error displaying swipe: {:?}", e));
                 None
             }
@@ -84,17 +84,59 @@ impl WatchTile for TimeTile {
 
 impl TimeTile {
     fn display_swipe(
-        &self,
-        twatch: &mut Twatch<'static>,
+        &mut self,
+        hal: &mut Hal<'static>,
         direction: ft6x36::Direction,
     ) -> Result<()> {
-        let hal = &mut twatch.hal;
+        self.update_state(hal);
+
         let text = format!("{:?}", direction);
         let style = MonoTextStyle::new(&PROFONT_24_POINT, Rgb565::WHITE);
         Text::new(&text, Point::new(30, 150), style).draw(&mut hal.display)?;
+
+        self.display_tile(hal)?;
         hal.display.commit_display()?;
+
         std::thread::sleep(Duration::from_millis(300));
-        self.run(hal)?;
+        self.display_tile(hal)?;
+
         hal.display.commit_display()
+    }
+
+    fn update_state(&mut self, hal: &mut Hal<'static>) {
+        match hal.pmu.get_battery_percentage() {
+            Ok(battery_level) => self.battery_level = battery_level,
+            Err(err) => error!("Error updating battery level: {}", err),
+        }
+        match hal.clock.get_datetime() {
+            Ok(time) => self.time = time,
+            Err(err) => error!("Error getting time: {:?}", err),
+        }
+
+        match hal.accel.accel_norm() {
+            Ok(accel) => self.accel = accel,
+            Err(err) => error!("Error updating accelerometer values: {:?}", err),
+        }
+    }
+
+    fn display_tile(&self, hal: &mut Hal<'static>) -> Result<()> {
+        let style = MonoTextStyle::new(&PROFONT_24_POINT, Rgb565::WHITE);
+        let small_style = MonoTextStyle::new(&PROFONT_9_POINT, Rgb565::WHITE);
+
+        let battery_level = format!("Bat: {:>3}%", self.battery_level.round());
+        Text::new(&battery_level, Point::new(30, 60), style).draw(&mut hal.display)?;
+
+        let time = format!(
+            "{:02}:{:02}:{:02}",
+            self.time.hours, self.time.minutes, self.time.seconds
+        );
+        Text::new(&time, Point::new(30, 30), style).draw(&mut hal.display)?;
+
+        let accel = format!(
+            "x:{:.2} y:{:.2} z:{:.2}",
+            self.accel.x, self.accel.y, self.accel.z
+        );
+        Text::new(&accel, Point::new(30, 90), small_style).draw(&mut hal.display)?;
+        Ok(())
     }
 }

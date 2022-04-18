@@ -5,6 +5,8 @@ use embedded_svc::sys_time::SystemTime;
 use ft6x36::TouchEvent;
 use num_enum::{FromPrimitive, IntoPrimitive};
 
+use crate::tiles::WatchTile;
+
 #[repr(u32)]
 #[derive(Copy, Clone, Debug, FromPrimitive, IntoPrimitive)]
 pub enum TwatchRawEvent {
@@ -17,7 +19,7 @@ pub enum TwatchRawEvent {
     Unknown = 1 << 31,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug)]
 pub struct TwatchEvent {
     pub time: Duration,
     pub kind: Kind,
@@ -31,10 +33,11 @@ impl TwatchEvent {
 }
 
 #[allow(dead_code)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug)]
 pub enum Kind {
     TimerRtc,
     Accel,
     Touch(TouchEvent),
     PmuButtonPressed,
+    NewTile(Box<dyn WatchTile + Send>),
 }

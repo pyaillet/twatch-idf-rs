@@ -4,28 +4,29 @@ use log::*;
 
 use crate::events::{Kind, TwatchEvent};
 use crate::tiles::WatchTile;
-use crate::twatch::{Hal, Twatch};
+use crate::twatch::Hal;
 
-#[derive(Default)]
+#[derive(Copy, Clone, Debug, Default)]
 pub struct SleepTile {}
 
+unsafe impl Send for SleepTile {}
+
 impl WatchTile for SleepTile {
-    fn run(&self, hal: &mut Hal<'static>) -> Result<()> {
+    fn run(&mut self, hal: &mut Hal<'static>) -> Result<()> {
         hal.light_sleep()
     }
 
-    fn process_event<'a>(
-        &self,
-        twatch: &mut Twatch<'static>,
-        event: &'a crate::events::TwatchEvent,
-    ) -> Option<&'a TwatchEvent> {
-        if let (_, Kind::PmuButtonPressed) = (event.time, event.kind) {
-            twatch
-                .hal
-                .wake_up()
+    fn process_event(
+        &mut self,
+        hal: &mut Hal<'static>,
+        event: crate::events::TwatchEvent,
+    ) -> Option<TwatchEvent> {
+        if let (_, Kind::PmuButtonPressed) = (&event.time, &event.kind) {
+            hal.wake_up()
                 .unwrap_or_else(|e| warn!("Error waking up: {}", e));
-            twatch.current_tile = crate::tiles::Tile::Time;
-            None
+            let tile = Box::new(crate::tiles::time::TimeTile::default());
+            let event = TwatchEvent::new(Kind::NewTile(tile));
+            Some(event)
         } else {
             Some(event)
         }

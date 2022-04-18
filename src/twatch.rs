@@ -25,7 +25,11 @@ use bma423::Bma423;
 use ft6x36::Ft6x36;
 use pcf8563::PCF8563;
 
-use crate::{display::TwatchDisplay, pmu::Pmu, tiles};
+use crate::{
+    display::TwatchDisplay,
+    pmu::Pmu,
+    tiles::{self, WatchTile},
+};
 use crate::{pmu::State, types::*};
 
 pub use crate::errors::*;
@@ -46,7 +50,7 @@ pub struct Hal<'a> {
 
 pub struct Twatch<'a> {
     pub hal: Hal<'a>,
-    pub current_tile: tiles::Tile,
+    pub current_tile: Box<dyn WatchTile + Send>,
 }
 
 impl Twatch<'static> {
@@ -193,7 +197,7 @@ impl Twatch<'static> {
 
         Twatch {
             hal,
-            current_tile: tiles::Tile::Time,
+            current_tile: Box::new(tiles::time::TimeTile::default()),
         }
     }
 
@@ -264,15 +268,22 @@ impl Twatch<'static> {
     }
 
     pub fn process_event(&mut self, raw_event: TwatchRawEvent) {
-        let tile = self.current_tile.get();
         let _ = self.process_raw_event(raw_event).map(move |event| {
-            tile.process_event(self, &event);
+            let current_tile = &mut self.current_tile;
+            let hal = &mut self.hal;
+            if let Some(event) = current_tile.process_event(hal, event) {
+                match (event.time, event.kind) {
+                    (_t, Kind::NewTile(tile)) => {
+                        self.current_tile = tile;
+                    }
+                    _ => warn!("Unhandled event"),
+                }
+            }
         });
     }
 
     pub fn run(&mut self) -> Result<()> {
-        let tile = self.current_tile.get();
-        tile.run(&mut self.hal)?;
+        self.current_tile.run(&mut self.hal)?;
         Ok(())
     }
 }

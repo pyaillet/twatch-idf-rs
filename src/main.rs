@@ -1,10 +1,10 @@
+mod display;
+mod errors;
 mod events;
 mod pmu;
-mod display;
 mod tiles;
 mod twatch;
 mod types;
-mod errors;
 
 use embedded_svc::event_bus::EventBus;
 use esp_idf_hal::peripherals;
@@ -12,7 +12,6 @@ use esp_idf_svc::notify::EspBackgroundNotify;
 use esp_idf_sys::EspError;
 
 use log::*;
-
 
 fn main() {
     let mut eventloop = init_esp().expect("Error initializing ESP");
@@ -25,7 +24,8 @@ fn main() {
     twatch.init().expect("Error initializing TWatch");
     info!("TWatch initialized");
     twatch.run().expect("Run default Tile");
-    let _subscription = eventloop.subscribe(move |raw_event: &u32| twatch.process_event((*raw_event).into()));
+    let _subscription =
+        eventloop.subscribe(move |raw_event: &u32| twatch.process_event((*raw_event).into()));
     loop {
         std::thread::sleep(std::time::Duration::from_millis(5_000));
     }
@@ -46,5 +46,12 @@ fn init_esp() -> Result<EspBackgroundNotify, EspError> {
     #[allow(unused)]
     let sys_loop_stack = Arc::new(EspSysLoopStack::new()?);
 
-    EspBackgroundNotify::new(&Default::default())
+    let notify_configuration = esp_idf_svc::notify::BackgroundNotifyConfiguration {
+        task_name: "BackgroundNotify",
+        task_priority: 0,
+        task_stack_size: 7168,
+        task_pin_to_core: None,
+    };
+
+    EspBackgroundNotify::new(&notify_configuration)
 }
