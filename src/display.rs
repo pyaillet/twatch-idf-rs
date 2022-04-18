@@ -60,7 +60,7 @@ impl TwatchDisplay<'static> {
     pub fn init(&mut self, delay_source: &mut impl DelayUs<u32>) -> Result<()> {
         self.set_display_on()?;
         self.display
-            .init(delay_source)
+            .init(delay_source, Default::default())
             .map_err(|_| TwatchError::Display)?;
         Ok(())
     }

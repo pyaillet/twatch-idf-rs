@@ -43,7 +43,7 @@ accelerometer = { version = "^0.12" }
 
 # drivers
 bma423 = { version = "0.0.1" }
-mipidsi = { git = "https://github.com/almindor/mipidsi.git" }
+mipidsi = { version = "^0.2" }
 axp20x = { version = "0.0.1" }
 pcf8563 = { version = "^0.1" }
 #ft6x36 = { version = "^0.2" }
