@@ -15,6 +15,15 @@ pub enum State {
     Off,
 }
 
+impl From<State> for axp20x::PowerState {
+    fn from(state: State) -> Self {
+        match state {
+            State::On => axp20x::PowerState::On,
+            State::Off => axp20x::PowerState::Off,
+        }
+    }
+}
+
 impl Pmu<'static> {
     pub fn new(i2c: EspSharedBusI2c0<'static>) -> Self {
         Self {
@@ -47,26 +56,25 @@ impl Pmu<'static> {
             )
             .map_err(crate::twatch::TwatchError::from)?;
 
-        self.set_power_output(State::On)?;
-
         self.init_irq()?;
         Ok(())
     }
 
-    pub fn set_power_output(&mut self, state: State) -> Result<()> {
+    pub fn set_screen_power(&mut self, state: State) -> Result<()> {
         self.axp20x
-            .set_power_output(
-                axp20x::Power::Ldo2,
-                match state {
-                    State::On => axp20x::PowerState::On,
-                    State::Off => axp20x::PowerState::Off,
-                },
-                &mut delay::Ets,
-            )
+            .set_power_output(axp20x::Power::Ldo2, state.into(), &mut delay::Ets)
             .map_err(crate::twatch::TwatchError::from)?;
         Ok(())
     }
 
+    pub fn set_audio_power(&mut self, state: State) -> Result<()> {
+        self.axp20x
+            .set_power_output(axp20x::Power::Ldo3, state.into(), &mut delay::Ets)
+            .map_err(crate::twatch::TwatchError::from)?;
+        Ok(())
+    }
+
+    #[allow(clippy::wrong_self_convention)]
     pub fn is_button_pressed(&mut self) -> Result<bool> {
         self.axp20x
             .read_irq()

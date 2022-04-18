@@ -33,6 +33,7 @@ esp-idf-hal = "^0.35"
 embedded-svc = "^0.19"
 embedded-hal = "=1.0.0-alpha.7"
 embedded-hal-0-2 = { package = "embedded-hal", version = "0.2", features = ["unproven"] }
+embedded-graphics-core = { version = "^0.3" }
 embedded-graphics = { version = "^0.7" }
 embedded-graphics-framebuf = "0.0.2"
 profont = { version = "^0.5" }
@@ -42,7 +43,7 @@ accelerometer = { version = "^0.12" }
 
 # drivers
 bma423 = { version = "0.0.1" }
-mipidsi = { git = "https://github.com/almindor/mipidsi.git" }
+mipidsi = { version = "^0.2" }
 axp20x = { version = "0.0.1" }
 pcf8563 = { version = "^0.1" }
 #ft6x36 = { version = "^0.2" }
