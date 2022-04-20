@@ -36,7 +36,8 @@ embedded-hal-0-2 = { package = "embedded-hal", version = "0.2", features = ["unp
 embedded-graphics-core = { version = "^0.3" }
 embedded-graphics = { version = "^0.7" }
 #embedded-graphics-framebuf = "0.0.2"
-embedded-graphics-framebuf = { path = "../embedded-graphics-framebuf/" }
+embedded-graphics-framebuf = { git = "https://github.com/pyaillet/embedded-graphics-framebuf.git", branch = "add-boundary-checks" }
+#embedded-graphics-framebuf = { path = "../embedded-graphics-framebuf/" }
 profont = { version = "^0.5" }
 display-interface-spi = { version = "^0.4" }
 shared-bus = { version = "^0.2", features = ["std"] }
@@ -48,8 +49,8 @@ mipidsi = { version = "^0.2" }
 axp20x = { version = "0.0.1" }
 pcf8563 = { version = "^0.1" }
 #ft6x36 = { version = "^0.2" }
-#ft6x36 = { git = "https://github.com/pyaillet/ft6x36-rs.git", branch = "add-gesture-support", features = [ "event_process" ] }
-ft6x36 = { path = "../ft6x36-rs/", features = [ "event_process" ] }
+ft6x36 = { git = "https://github.com/pyaillet/ft6x36-rs.git", branch = "handle_orientation", features = [ "event_process" ] }
+#ft6x36 = { path = "../ft6x36-rs/", features = [ "event_process" ] }
 
 [build-dependencies]
 embuild = "0.28"

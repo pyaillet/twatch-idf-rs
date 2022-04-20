@@ -58,8 +58,7 @@ pub struct Backlight {
 impl Backlight {
     pub fn new(channel: CHANNEL0, timer: TIMER0, backlight: Gpio12<Output>) -> Self {
         let config = TimerConfig::default().frequency(5.kHz().into());
-        let timer = Arc::new(Timer::new(timer, &config).unwrap());
-        let timer0 = timer.clone();
+        let timer0 = Arc::new(Timer::new(timer, &config).unwrap());
         let channel = Channel::new(channel, timer0, backlight).unwrap();
         Self { channel }
     }

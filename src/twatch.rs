@@ -99,7 +99,7 @@ impl Twatch<'static> {
 
         let bl = Backlight::new(peripherals.ledc.channel0, peripherals.ledc.timer0, backlight);
 
-        let mut display = TwatchDisplay::new(di, bl).unwrap();
+        let display = TwatchDisplay::new(di, bl).unwrap();
 
         let motor = pins.gpio4.into_output().unwrap();
 
