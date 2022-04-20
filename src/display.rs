@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
@@ -5,20 +7,27 @@ use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use embedded_graphics_framebuf::FrameBuf;
 
 use embedded_hal_0_2::blocking::delay::DelayUs;
-use embedded_hal_0_2::digital::v2::OutputPin;
-use esp_idf_hal::gpio::{self, Output};
+use esp_idf_hal::{
+    gpio::{Gpio12, Output},
+    ledc::{config::TimerConfig, Channel, Timer, CHANNEL0, TIMER0},
+    prelude::*,
+};
 use mipidsi::Display;
 
 pub use crate::errors::*;
 use crate::types::EspSpi2InterfaceNoCS;
 
-pub struct TwatchDisplay<'a> {
+#[link_section = ".dram1"]
+static mut FBUFF: FrameBuf<Rgb565, 240_usize, 240_usize> =
+    FrameBuf([[embedded_graphics::pixelcolor::Rgb565::BLACK; 240]; 240]);
+
+pub struct TwatchDisplay {
     pub display: Display<EspSpi2InterfaceNoCS, mipidsi::NoPin, mipidsi::models::ST7789>,
-    pub frame_buffer: &'a mut FrameBuf<Rgb565, 240_usize, 240_usize>,
-    pub backlight: gpio::Gpio12<Output>,
+    pub frame_buffer: &'static mut FrameBuf<Rgb565, 240_usize, 240_usize>,
+    pub backlight: Backlight,
 }
 
-impl<'a> DrawTarget for TwatchDisplay<'a> {
+impl DrawTarget for TwatchDisplay {
     type Color = Rgb565;
 
     type Error = TwatchError;
@@ -28,12 +37,12 @@ impl<'a> DrawTarget for TwatchDisplay<'a> {
         I: IntoIterator<Item = Pixel<Self::Color>>,
     {
         self.frame_buffer
-           .draw_iter(pixels)
-           .map_err(|_| TwatchError::Display)
+            .draw_iter(pixels)
+            .map_err(|_| TwatchError::Display)
     }
 }
 
-impl<'a> OriginDimensions for TwatchDisplay<'a> {
+impl OriginDimensions for TwatchDisplay {
     fn size(&self) -> Size {
         Size {
             width: 240,
@@ -42,10 +51,22 @@ impl<'a> OriginDimensions for TwatchDisplay<'a> {
     }
 }
 
-impl TwatchDisplay<'static> {
-    pub fn new(di: EspSpi2InterfaceNoCS, backlight: gpio::Gpio12<Output>) -> Result<Self> {
-        static mut FBUFF: FrameBuf<Rgb565, 240_usize, 240_usize> =
-            FrameBuf([[embedded_graphics::pixelcolor::Rgb565::BLACK; 240]; 240]);
+pub struct Backlight {
+    channel: Channel<CHANNEL0, TIMER0, Arc<Timer<TIMER0>>, Gpio12<Output>>,
+}
+
+impl Backlight {
+    pub fn new(channel: CHANNEL0, timer: TIMER0, backlight: Gpio12<Output>) -> Self {
+        let config = TimerConfig::default().frequency(5.kHz().into());
+        let timer = Arc::new(Timer::new(timer, &config).unwrap());
+        let timer0 = timer.clone();
+        let channel = Channel::new(channel, timer0, backlight).unwrap();
+        Self { channel }
+    }
+}
+
+impl TwatchDisplay {
+    pub fn new(di: EspSpi2InterfaceNoCS, backlight: Backlight) -> Result<Self> {
         let frame_buffer = unsafe { &mut FBUFF };
 
         let display = Display::st7789_without_rst(di);
@@ -73,13 +94,21 @@ impl TwatchDisplay<'static> {
         Ok(())
     }
 
+    pub fn set_display_level<I: Into<u32>>(&mut self, level: I) -> Result<()> {
+        let max_duty = self.backlight.channel.get_max_duty();
+        self.backlight
+            .channel
+            .set_duty(level.into() * max_duty / 100)?;
+        Ok(())
+    }
+
     pub fn set_display_on(&mut self) -> Result<()> {
-        self.backlight.set_high()?;
+        self.set_display_level(100u32)?;
         Ok(())
     }
 
     pub fn set_display_off(&mut self) -> Result<()> {
-        self.backlight.set_low()?;
+        self.set_display_level(0u32)?;
         Ok(())
     }
 }
