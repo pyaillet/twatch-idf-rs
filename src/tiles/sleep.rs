@@ -1,5 +1,6 @@
 use anyhow::Result;
 
+use embedded_graphics::prelude::Point;
 use log::*;
 
 use crate::events::{Kind, TwatchEvent};
@@ -12,7 +13,7 @@ pub struct SleepTile {}
 unsafe impl Send for SleepTile {}
 
 impl WatchTile for SleepTile {
-    fn run(&mut self, hal: &mut Hal<'static>) -> Result<()> {
+    fn run_with_offset(&mut self, hal: &mut Hal<'static>, _offset: Point) -> Result<()> {
         hal.light_sleep()
     }
 

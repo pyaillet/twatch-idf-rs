@@ -26,7 +26,7 @@ use ft6x36::Ft6x36;
 use pcf8563::PCF8563;
 
 use crate::{
-    display::TwatchDisplay,
+    display::{Backlight, TwatchDisplay},
     pmu::Pmu,
     tiles::{self, WatchTile},
 };
@@ -38,7 +38,7 @@ pub use crate::events::*;
 pub struct Hal<'a> {
     pub pmu: Pmu<'a>,
     pub pmu_irq_pin: gpio::Gpio35<SubscribedInput>,
-    pub display: TwatchDisplay<'a>,
+    pub display: TwatchDisplay,
     pub motor: gpio::Gpio4<Output>,
     pub clock: PCF8563<EspSharedBusI2c0<'a>>,
     pub rtc_irq: gpio::Gpio37<SubscribedInput>,
@@ -97,7 +97,9 @@ impl Twatch<'static> {
         let di = SPIInterfaceNoCS::new(spi, dc.into_output().expect("Error setting dc to output"));
         info!("Display Initialized");
 
-        let display = TwatchDisplay::new(di, backlight).unwrap();
+        let bl = Backlight::new(peripherals.ledc.channel0, peripherals.ledc.timer0, backlight);
+
+        let display = TwatchDisplay::new(di, bl).unwrap();
 
         let motor = pins.gpio4.into_output().unwrap();
 
@@ -167,7 +169,7 @@ impl Twatch<'static> {
         let i2c1 = i2c::Master::<i2c::I2C1, _, _>::new(i2c1, i2c::MasterPins { sda, scl }, config)
             .unwrap();
 
-        let touch_screen = Ft6x36::new(i2c1);
+        let touch_screen = Ft6x36::new(i2c1, ft6x36::Dimension(240, 240));
         let touch_irq = pins.gpio38.into_input().unwrap();
         let touch_irq = unsafe {
             touch_irq.into_subscribed(
@@ -197,7 +199,7 @@ impl Twatch<'static> {
 
         Twatch {
             hal,
-            current_tile: Box::new(tiles::time::TimeTile::default()),
+            current_tile: Box::new(tiles::hello::HelloTile::default()),
         }
     }
 
@@ -207,7 +209,7 @@ impl Twatch<'static> {
         self.hal.display.init(&mut delay::Ets)?;
 
         self.hal.pmu.set_screen_power(State::On)?;
-        self.hal.display.set_display_on()?;
+        self.hal.display.set_display_level(1u32)?;
 
         self.hal.touch_screen.init().map_err(TwatchError::from)?;
         match self.hal.touch_screen.get_info() {
@@ -261,7 +263,7 @@ impl Twatch<'static> {
                 None
             }
             _ => {
-                warn!("Unhandled event");
+                warn!("Unhandled event: {:?}", &raw_event);
                 None
             }
         }
@@ -276,7 +278,7 @@ impl Twatch<'static> {
                     (_t, Kind::NewTile(tile)) => {
                         self.current_tile = tile;
                     }
-                    _ => warn!("Unhandled event"),
+                    (_t, event) => warn!("Unhandled event: {:?}", &event),
                 }
             }
         });
