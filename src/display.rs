@@ -4,9 +4,8 @@ use anyhow::Result;
 
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 
-use embedded_graphics_framebuf::FrameBuf;
-
 use embedded_hal_0_2::blocking::delay::DelayUs;
+
 use esp_idf_hal::{
     gpio::{Gpio12, Output},
     ledc::{config::TimerConfig, Channel, Timer, CHANNEL0, TIMER0},
@@ -17,13 +16,8 @@ use mipidsi::Display;
 pub use crate::errors::*;
 use crate::types::EspSpi2InterfaceNoCS;
 
-#[link_section = ".dram1"]
-static mut FBUFF: FrameBuf<Rgb565, 240_usize, 240_usize> =
-    FrameBuf([[embedded_graphics::pixelcolor::Rgb565::BLACK; 240]; 240]);
-
 pub struct TwatchDisplay {
     pub display: Display<EspSpi2InterfaceNoCS, mipidsi::NoPin, mipidsi::models::ST7789>,
-    pub frame_buffer: &'static mut FrameBuf<Rgb565, 240_usize, 240_usize>,
     pub backlight: Backlight,
 }
 
@@ -36,7 +30,7 @@ impl DrawTarget for TwatchDisplay {
     where
         I: IntoIterator<Item = Pixel<Self::Color>>,
     {
-        self.frame_buffer
+        self.display
             .draw_iter(pixels)
             .map_err(|_| TwatchError::Display)
     }
@@ -66,30 +60,23 @@ impl Backlight {
 
 impl TwatchDisplay {
     pub fn new(di: EspSpi2InterfaceNoCS, backlight: Backlight) -> Result<Self> {
-        let frame_buffer = unsafe { &mut FBUFF };
-
         let display = Display::st7789_without_rst(di);
 
-        Ok(Self {
-            display,
-            frame_buffer,
-            backlight,
-        })
+        Ok(Self { display, backlight })
     }
 
     pub fn init(&mut self, delay_source: &mut impl DelayUs<u32>) -> Result<()> {
-        self.set_display_on()?;
         self.display
             .init(delay_source, Default::default())
-            .map_err(|_| TwatchError::Display)?;
+            .map_err(|e| {
+                log::info!("Error initializing display {:?}", e);
+                TwatchError::Display
+            })?;
         Ok(())
     }
 
     pub fn commit_display(&mut self) -> Result<()> {
-        self.display
-            .set_pixels(0, 0, 240, 240, self.frame_buffer.into_iter())
-            .map_err(|_| TwatchError::Display)?;
-        self.frame_buffer.clear_black();
+        // TODO
         Ok(())
     }
 

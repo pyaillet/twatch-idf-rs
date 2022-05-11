@@ -21,6 +21,7 @@ unsafe impl Send for HelloTile {}
 impl WatchTile for HelloTile {
     fn run_with_offset(&mut self, hal: &mut Hal<'static>, offset: Point) -> Result<()> {
         self.display_tile(hal, offset)?;
+        hal.display.commit_display()?;
         Ok(())
     }
 

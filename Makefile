@@ -18,7 +18,7 @@ flash-debug: debug ## Flash the debug firmware.
 
 .PHONY: flash
 flash: release ## Flash the release firmware.
-	cargo espflash
+	cargo espflash --release
 
 .PHONY: monitor
 monitor: ## Monitor the device (default).

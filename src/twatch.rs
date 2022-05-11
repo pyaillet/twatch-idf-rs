@@ -3,7 +3,7 @@ use std::time::Duration;
 use embedded_hal_0_2::digital::v2::OutputPin;
 use esp_idf_hal::{
     delay,
-    gpio::{self, InterruptType, Output, SubscribedInput},
+    gpio::{self, Gpio23, InterruptType, Output, SubscribedInput},
     i2c,
     peripherals::Peripherals,
     prelude::*,
@@ -17,7 +17,7 @@ use anyhow::Result;
 use log::*;
 
 use embedded_svc::{event_bus::Postbox, sys_time::SystemTime};
-use esp_idf_svc::notify::EspBackgroundNotify;
+use esp_idf_svc::notify::EspNotify;
 
 use display_interface_spi::SPIInterfaceNoCS;
 
@@ -54,7 +54,7 @@ pub struct Twatch<'a> {
 }
 
 impl Twatch<'static> {
-    pub fn new(peripherals: Peripherals, mut eventloop: EspBackgroundNotify) -> Self {
+    pub fn new(peripherals: Peripherals, mut eventloop: EspNotify) -> Self {
         let pins = peripherals.pins;
         let backlight = pins
             .gpio12
@@ -77,17 +77,26 @@ impl Twatch<'static> {
             .into_output()
             .expect("Error setting gpio19 to output");
 
+        /*
         let config = <spi::config::Config as Default>::default()
             .baudrate(26.MHz().into())
             // .bit_order(embedded_hal::spi::BitOrder::MSBFirst)
             .data_mode(embedded_hal::spi::MODE_0);
+        */
+        let config = <spi::config::Config as Default>::default()
+            //.baudrate(26.MHz().into())
+            .baudrate(80.MHz().into())
+            .write_only(true)
+            //.dma_channel(2)
+            //.max_transfer_size(240 * 240 * 2 + 8)
+            .data_mode(embedded_hal::spi::MODE_0);
 
-        let spi = spi::Master::<spi::SPI2, _, _, _, _>::new(
-            peripherals.spi2,
+        let spi = spi::Master::<spi::SPI3, _, _, _, _>::new(
+            peripherals.spi3,
             spi::Pins {
                 sclk,
                 sdo,
-                sdi: Option::<gpio::Gpio21<gpio::Unknown>>::None,
+                sdi: Option::<Gpio23<Output>>::None,
                 cs: Some(cs),
             },
             config,
@@ -97,7 +106,11 @@ impl Twatch<'static> {
         let di = SPIInterfaceNoCS::new(spi, dc.into_output().expect("Error setting dc to output"));
         info!("Display Initialized");
 
-        let bl = Backlight::new(peripherals.ledc.channel0, peripherals.ledc.timer0, backlight);
+        let bl = Backlight::new(
+            peripherals.ledc.channel0,
+            peripherals.ledc.timer0,
+            backlight,
+        );
 
         let display = TwatchDisplay::new(di, bl).unwrap();
 
@@ -204,19 +217,26 @@ impl Twatch<'static> {
     }
 
     pub fn init(&mut self) -> Result<()> {
+        info!("Initializing twatch");
+
+        info!("Initializing PMU");
         self.hal.pmu.init()?;
 
+        info!("Initializing Display");
         self.hal.display.init(&mut delay::Ets)?;
 
+        info!("Initializing screen power");
         self.hal.pmu.set_screen_power(State::On)?;
-        self.hal.display.set_display_level(1u32)?;
+        self.hal.display.set_display_level(25u32)?;
 
+        info!("Initializing touch screen");
         self.hal.touch_screen.init().map_err(TwatchError::from)?;
         match self.hal.touch_screen.get_info() {
             Some(info) => info!("Touch screen info: {info:?}"),
             None => warn!("No info"),
         }
 
+        info!("Initializing accelerometer");
         self.hal
             .accel
             .init(&mut delay::Ets)
@@ -240,13 +260,15 @@ impl Twatch<'static> {
     fn process_raw_event(&mut self, raw_event: TwatchRawEvent) -> Option<TwatchEvent> {
         let time = esp_idf_svc::systime::EspSystemTime {}.now();
         match raw_event {
-            TwatchRawEvent::Touch => self
-                .hal
-                .touch_screen
-                .get_touch_event()
-                .ok()
-                .and_then(|touch_event| self.hal.touch_screen.process_event(time, touch_event))
-                .map(|touch_event| TwatchEvent::new(Kind::Touch(touch_event))),
+            TwatchRawEvent::Touch => {
+                log::debug!("Touch event");
+                self.hal
+                    .touch_screen
+                    .get_touch_event()
+                    .ok()
+                    .and_then(|touch_event| self.hal.touch_screen.process_event(time, touch_event))
+                    .map(|touch_event| TwatchEvent::new(Kind::Touch(touch_event)))
+            }
             TwatchRawEvent::Accel => {
                 info!("AccelEvent");
                 None

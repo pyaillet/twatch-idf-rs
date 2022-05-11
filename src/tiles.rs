@@ -30,12 +30,12 @@ pub(crate) fn move_to_tile(
 ) -> Result<()> {
     let mut offset1 = Point { x: 0, y: 0 };
     let (inc, mut offset2) = match dir {
-        Direction::Up => (Point { x: 0, y: -40 }, Point { x: 0, y: 240 }),
-        Direction::Down => (Point { x: 0, y: 40 }, Point { x: 0, y: -240 }),
-        Direction::Left => (Point { x: 40, y: 0 }, Point { x: -240, y: 0 }),
-        Direction::Right => (Point { x: -40, y: 0 }, Point { x: 240, y: 0 }),
+        Direction::Up => (Point { x: 0, y: -20 }, Point { x: 0, y: 240 }),
+        Direction::Down => (Point { x: 0, y: 20 }, Point { x: 0, y: -240 }),
+        Direction::Left => (Point { x: 20, y: 0 }, Point { x: -240, y: 0 }),
+        Direction::Right => (Point { x: -20, y: 0 }, Point { x: 240, y: 0 }),
     };
-    for _i in 0..6 {
+    for _i in 0..12 {
         offset1 += inc;
         offset2 += inc;
         from.display_tile(hal, offset1)?;

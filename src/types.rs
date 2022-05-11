@@ -1,5 +1,5 @@
 use esp_idf_hal::{
-    gpio::{self, Output, Unknown},
+    gpio::{self, Output},
     i2c, spi,
 };
 
@@ -7,10 +7,10 @@ use display_interface_spi::SPIInterfaceNoCS;
 
 pub type EspSpi2InterfaceNoCS = SPIInterfaceNoCS<
     spi::Master<
-        spi::SPI2,
+        spi::SPI3,
         gpio::Gpio18<Output>,
         gpio::Gpio19<Output>,
-        gpio::Gpio21<Unknown>,
+        gpio::Gpio23<Output>,
         gpio::Gpio5<Output>,
     >,
     gpio::Gpio27<Output>,
