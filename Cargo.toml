@@ -48,9 +48,7 @@ bma423 = { version = "0.0.1" }
 mipidsi = { version = "^0.2" }
 axp20x = { version = "0.0.1" }
 pcf8563 = { version = "^0.1" }
-#ft6x36 = { version = "^0.2" }
-ft6x36 = { git = "https://github.com/pyaillet/ft6x36-rs.git", branch = "handle_orientation", features = [ "event_process" ] }
-#ft6x36 = { path = "../ft6x36-rs/", features = [ "event_process" ] }
+ft6x36 = { version = "^0.4" }
 
 [build-dependencies]
 embuild = "0.28"
