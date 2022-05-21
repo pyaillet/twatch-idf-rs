@@ -4,6 +4,7 @@ use anyhow::Result;
 
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 
+use embedded_graphics_framebuf::{AsWords, FrameBuf};
 use embedded_hal_0_2::blocking::delay::DelayUs;
 
 use esp_idf_hal::{
@@ -19,6 +20,7 @@ use crate::types::EspSpi2InterfaceNoCS;
 pub struct TwatchDisplay {
     pub display: Display<EspSpi2InterfaceNoCS, mipidsi::NoPin, mipidsi::models::ST7789>,
     pub backlight: Backlight,
+    pub framebuffer: &'static mut FrameBuf<Rgb565, 240_usize, 240_usize, 57600_usize>,
 }
 
 impl DrawTarget for TwatchDisplay {
@@ -30,7 +32,8 @@ impl DrawTarget for TwatchDisplay {
     where
         I: IntoIterator<Item = Pixel<Self::Color>>,
     {
-        self.display
+        self.framebuffer
+            //self.display
             .draw_iter(pixels)
             .map_err(|_| TwatchError::Display)
     }
@@ -61,8 +64,15 @@ impl Backlight {
 impl TwatchDisplay {
     pub fn new(di: EspSpi2InterfaceNoCS, backlight: Backlight) -> Result<Self> {
         let display = Display::st7789_without_rst(di);
+        static mut FBUFF: FrameBuf<Rgb565, 240_usize, 240_usize, 57_600_usize> =
+            FrameBuf([Rgb565::BLACK; 57_600]);
+        let framebuffer = unsafe { &mut FBUFF };
 
-        Ok(Self { display, backlight })
+        Ok(Self {
+            display,
+            backlight,
+            framebuffer,
+        })
     }
 
     pub fn init(&mut self, delay_source: &mut impl DelayUs<u32>) -> Result<()> {
@@ -76,7 +86,10 @@ impl TwatchDisplay {
     }
 
     pub fn commit_display(&mut self) -> Result<()> {
-        // TODO
+        self.display
+            .write_raw(0, 0, 240, 240, self.framebuffer.as_words())
+            .map_err(|_| TwatchError::Display)?;
+        self.framebuffer.clear_black();
         Ok(())
     }
 

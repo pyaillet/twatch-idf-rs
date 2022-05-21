@@ -16,7 +16,10 @@ use anyhow::Result;
 
 use log::*;
 
-use embedded_svc::{event_bus::Postbox, sys_time::SystemTime};
+use embedded_svc::{
+    event_bus::{EventBus, Postbox},
+    sys_time::SystemTime,
+};
 use esp_idf_svc::notify::EspNotify;
 
 use display_interface_spi::SPIInterfaceNoCS;
@@ -87,8 +90,8 @@ impl Twatch<'static> {
             //.baudrate(26.MHz().into())
             .baudrate(80.MHz().into())
             .write_only(true)
-            //.dma_channel(2)
-            //.max_transfer_size(240 * 240 * 2 + 8)
+            .dma(spi::Dma::Channel2)
+            .max_transfer_size(240 * 240 * 2 + 8)
             .data_mode(embedded_hal::spi::MODE_0);
 
         let spi = spi::Master::<spi::SPI3, _, _, _, _>::new(

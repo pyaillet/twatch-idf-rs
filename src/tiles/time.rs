@@ -3,7 +3,7 @@ use std::time::Duration;
 use accelerometer::vector::F32x3;
 use anyhow::Result;
 
-use ft6x36::{TouchEvent, Direction};
+use ft6x36::{Direction, TouchEvent};
 use log::*;
 
 use embedded_graphics::mono_font::MonoTextStyle;
@@ -18,7 +18,7 @@ use profont::{PROFONT_24_POINT, PROFONT_9_POINT};
 use accelerometer::Accelerometer;
 
 use crate::events::{Kind, TwatchEvent};
-use crate::tiles::{DisplayTile ,WatchTile};
+use crate::tiles::{DisplayTile, WatchTile};
 use crate::twatch::Hal;
 
 #[derive(Copy, Clone, Debug)]

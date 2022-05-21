@@ -7,6 +7,7 @@ mod twatch;
 mod types;
 
 use embedded_svc::event_bus::EventBus;
+
 use esp_idf_hal::peripherals;
 use esp_idf_svc::notify::EspNotify;
 use esp_idf_sys::EspError;
