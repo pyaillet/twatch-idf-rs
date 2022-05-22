@@ -14,6 +14,7 @@ use esp_idf_hal::{
 };
 use mipidsi::Display;
 
+use crate::utils::measure_exec_time;
 pub use crate::errors::*;
 use crate::types::EspSpi2InterfaceNoCS;
 
@@ -86,9 +87,15 @@ impl TwatchDisplay {
     }
 
     pub fn commit_display(&mut self) -> Result<()> {
-        self.display
-            .write_raw(0, 0, 240, 240, self.framebuffer.as_words())
-            .map_err(|_| TwatchError::Display)?;
+        measure_exec_time!(
+            {
+                self.display
+                    .write_raw(0, 0, 240, 240, self.framebuffer.as_words())
+                    .map_err(|_| TwatchError::Display)?;
+            },
+            "commit_display"
+        );
+
         self.framebuffer.clear_black();
         Ok(())
     }

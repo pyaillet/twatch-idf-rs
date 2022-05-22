@@ -53,7 +53,7 @@ impl DisplayTile for HelloTile {
         let style = MonoTextStyle::new(&PROFONT_24_POINT, Rgb565::WHITE);
 
         Text::new(
-            "Ceci est une tres longues phrase qui va depasser niveau affichage",
+            "Ceci est une tres",
             Point::new(0, 30) + offset,
             style,
         )

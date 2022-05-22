@@ -17,7 +17,7 @@ use anyhow::Result;
 use log::*;
 
 use embedded_svc::{
-    event_bus::{EventBus, Postbox},
+    event_bus::Postbox,
     sys_time::SystemTime,
 };
 use esp_idf_svc::notify::EspNotify;
@@ -80,14 +80,7 @@ impl Twatch<'static> {
             .into_output()
             .expect("Error setting gpio19 to output");
 
-        /*
         let config = <spi::config::Config as Default>::default()
-            .baudrate(26.MHz().into())
-            // .bit_order(embedded_hal::spi::BitOrder::MSBFirst)
-            .data_mode(embedded_hal::spi::MODE_0);
-        */
-        let config = <spi::config::Config as Default>::default()
-            //.baudrate(26.MHz().into())
             .baudrate(80.MHz().into())
             .write_only(true)
             .dma(spi::Dma::Channel2)

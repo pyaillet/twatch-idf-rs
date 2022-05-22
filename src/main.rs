@@ -1,3 +1,4 @@
+mod utils;
 mod display;
 mod errors;
 mod events;
