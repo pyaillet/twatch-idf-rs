@@ -52,12 +52,7 @@ impl DisplayTile for HelloTile {
     fn display_tile(&self, hal: &mut Hal<'static>, offset: Point) -> Result<()> {
         let style = MonoTextStyle::new(&PROFONT_24_POINT, Rgb565::WHITE);
 
-        Text::new(
-            "Ceci est une tres",
-            Point::new(0, 30) + offset,
-            style,
-        )
-        .draw(&mut hal.display)?;
+        Text::new("Ceci est une tres", Point::new(0, 30) + offset, style).draw(&mut hal.display)?;
 
         Ok(())
     }

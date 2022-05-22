@@ -16,10 +16,7 @@ use anyhow::Result;
 
 use log::*;
 
-use embedded_svc::{
-    event_bus::Postbox,
-    sys_time::SystemTime,
-};
+use embedded_svc::{event_bus::Postbox, sys_time::SystemTime};
 use esp_idf_svc::notify::EspNotify;
 
 use display_interface_spi::SPIInterfaceNoCS;
@@ -120,10 +117,11 @@ impl Twatch<'static> {
         let i2c0 = i2c::Master::<i2c::I2C0, _, _>::new(i2c0, i2c::MasterPins { sda, scl }, config)
             .unwrap();
 
-        let i2c0_shared_bus: &'static _ = shared_bus::new_std!(esp_idf_hal::i2c::Master<i2c::I2C0, gpio::Gpio21<gpio::Output>, gpio::Gpio22<gpio::Output>> = i2c0).unwrap_or_else(|| {
-            error!("Error initializing shared bus");
-            panic!("Error")
-        });
+        let i2c0_shared_bus: &'static _ = shared_bus::new_std!(crate::types::EspI2c0 = i2c0)
+            .unwrap_or_else(|| {
+                error!("Error initializing shared bus");
+                panic!("Error")
+            });
         info!("I2c shared bus initialized");
 
         let clock = PCF8563::new(i2c0_shared_bus.acquire_i2c());
@@ -318,6 +316,7 @@ impl Hal<'static> {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn deep_sleep(&mut self) -> Result<()> {
         self.display.set_display_off()?;
         self.pmu.set_screen_power(State::Off)?;

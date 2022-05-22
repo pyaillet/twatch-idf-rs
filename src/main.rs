@@ -1,4 +1,3 @@
-mod utils;
 mod display;
 mod errors;
 mod events;
@@ -6,6 +5,7 @@ mod pmu;
 mod tiles;
 mod twatch;
 mod types;
+mod utils;
 
 use embedded_svc::event_bus::EventBus;
 

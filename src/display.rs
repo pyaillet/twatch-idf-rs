@@ -14,9 +14,9 @@ use esp_idf_hal::{
 };
 use mipidsi::Display;
 
-use crate::utils::measure_exec_time;
 pub use crate::errors::*;
 use crate::types::EspSpi2InterfaceNoCS;
+use crate::utils::measure_exec_time;
 
 pub struct TwatchDisplay {
     pub display: Display<EspSpi2InterfaceNoCS, mipidsi::NoPin, mipidsi::models::ST7789>,
