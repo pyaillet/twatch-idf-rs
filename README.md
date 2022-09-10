@@ -21,7 +21,7 @@ What's working ?
 - [x] Touchscreen - using my own driver for [FT6x36](https://github.com/pyaillet/ft6x36-rs)
 - [x] Accelerometer - using my own driver of [BMA423](https://github.com/pyaillet/bma423-rs/)
   - [x] X/Y/Z axis sensors
-  - [ ] Actity recognition
+  - [ ] Activity recognition
   - [ ] Step counter
 - [ ] I2S Speaker
 - [x] WiFi should work, but not used right nown
