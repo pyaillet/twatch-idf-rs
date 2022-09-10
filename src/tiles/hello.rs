@@ -1,13 +1,13 @@
 use anyhow::Result;
 
-use log::*;
-
 use embedded_graphics::mono_font::MonoTextStyle;
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 use embedded_graphics::text::Text;
 use ft6x36::{Direction, TouchEvent};
 use profont::{PROFONT_18_POINT, PROFONT_24_POINT};
+
+use log::*;
 
 use crate::events::Kind;
 use crate::tiles::WatchTile;

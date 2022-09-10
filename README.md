@@ -1,3 +1,56 @@
+![CI](https://github.com/pyaillet/esp-idf-ble/workflows/Continuous%20integration/badge.svg)
+![MIT/Apache-2.0 licensed](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
+
 # twatch-idf-rs
 
 TTGO T-Watch 2020 v1 Rust firmware.
+
+## Description
+
+This project is a Work in Progress of a rust firmware for the T-Watch-v1 from Lilygo.
+
+What's working ?
+
+- [?] Power Management Unit - using my own driver for [AXP202](https://github.com/pyaillet/axp20x-rs)
+  - [x] Power button
+  - [x] Battery level
+  - [?] Plugged in status - Not tested
+  - [ ] Deep sleep
+- [x] Screen - using [mipidsi crate](https://github.com/almindor/mipidsi)
+  - [x] Backlight settings
+- [x] Touchscreen - using my own driver for [FT6x36](https://github.com/pyaillet/ft6x36-rs)
+- [?] Accelerometer - using my own driver of [BMA423](https://github.com/pyaillet/bma423-rs/)
+  - [x] X/Y/Z axis sensors
+  - [ ] Actity recognition
+  - [ ] Step counter
+- [ ] I2S Speaker
+- [?] WiFi should work, but not used right nown
+- [ ] BLE - WIP [here](https://github.com/pyaillet/esp-idf-ble)
+- [x] Vibration with the included motor
+- [?] Clock - using [PCF8563 realtime clock driver](https://github.com/nebelgrau77/pcf8563-rs)
+  - [x] Time
+  - [?] Alarms - Not tested
+
+## What's included
+
+This project is a tech demo. The firmware comes with 5 tiles demonstrating some features:
+
+- Hello world: only displays text
+- Light: adjust brightness of the screen backlight
+- Motor: demonstrate the vibrator
+- Time: Shows Realtime clock, battery level, accelerometer and swipe gestures
+- Sleep: Disable screen and backlight when button is pressed
+
+## Credits
+
+Many things from this project are inspired by the [rust-esp32-std-demo](https://github.com/ivmarkov/rust-esp32-std-demo).
+Kudos to the people on #esp-rs:matrix.org for their help.
+
+## How to use?
+
+Refer to [this repo](https://github.com/esp-rs/rust-build) to install the custom Rust ESP toolchain. You should also install [cargo espflash](https://github.com/esp-rs/espflash) to ease the use of this project.
+
+Then you can launch the following command to compile one of the example, flash it to your device and monitor the ESP32 serial:
+
+`cargo espflash --monitor --speed 921600 <device>`
+

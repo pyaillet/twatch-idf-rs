@@ -16,7 +16,7 @@ use embedded_graphics::text::Text;
 use embedded_graphics::Drawable;
 
 use pcf8563::DateTime;
-use profont::{PROFONT_24_POINT, PROFONT_9_POINT};
+use profont::{PROFONT_24_POINT, PROFONT_12_POINT};
 use u8g2_fonts::{self, fonts, FontRenderer};
 
 use accelerometer::Accelerometer;
@@ -116,7 +116,7 @@ impl WatchTile for TimeTile {
         let font = FontRenderer::new::<fonts::u8g2_font_logisoso78_tn>();
 
         let style = MonoTextStyle::new(&PROFONT_24_POINT, Rgb565::WHITE);
-        let small_style = MonoTextStyle::new(&PROFONT_9_POINT, Rgb565::WHITE);
+        let small_style = MonoTextStyle::new(&PROFONT_12_POINT, Rgb565::WHITE);
 
         let battery_level = format!("Bat: {:>3}%", self.battery_level.round());
         Text::new(&battery_level, Point::new(30, 30), style).draw(&mut hal.display)?;
@@ -140,7 +140,7 @@ impl WatchTile for TimeTile {
             "x:{:.2} y:{:.2} z:{:.2}",
             self.accel.x, self.accel.y, self.accel.z
         );
-        Text::new(&accel, Point::new(30, 180), small_style).draw(&mut hal.display)?;
+        Text::new(&accel, Point::new(30, 220), small_style).draw(&mut hal.display)?;
         Ok(())
     }
 
@@ -172,7 +172,7 @@ impl TimeTile {
 
         let text = format!("{direction:?}");
         let style = MonoTextStyle::new(&PROFONT_24_POINT, Rgb565::WHITE);
-        Text::new(&text, Point::new(30, 150) + offset, style).draw(&mut hal.display)?;
+        Text::new(&text, Point::new(30, 170) + offset, style).draw(&mut hal.display)?;
 
         self.display_tile(hal)?;
         hal.display.commit_display()?;

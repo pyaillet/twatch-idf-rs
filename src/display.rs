@@ -13,7 +13,7 @@ use esp_idf_hal::{
     prelude::*,
 };
 use log::*;
-use mipidsi::Display;
+use mipidsi::{Display, DisplayOptions, ColorOrder};
 
 pub use crate::errors::*;
 use crate::types::EspSpi2InterfaceNoCS;
@@ -83,8 +83,12 @@ impl TwatchDisplay {
     }
 
     pub fn init(&mut self, delay_source: &mut impl DelayUs<u32>) -> Result<()> {
+        let display_options = DisplayOptions {
+            color_order: ColorOrder::Bgr,
+            ..Default::default()
+        };
         self.display
-            .init(delay_source, Default::default())
+            .init(delay_source, display_options)
             .map_err(|e| {
                 info!("Error initializing display {e:?}");
                 TwatchError::Display

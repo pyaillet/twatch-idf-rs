@@ -78,14 +78,14 @@ pub(crate) fn move_to_tile(
     for _i in 0..steps {
         hal.display.commit_display_partial(rect)?;
         match dir {
-            Direction::Left => rect.top_left.x = rect.top_left.x - (240 / steps) as i32,
-            Direction::Right => rect.top_left.x = rect.top_left.x + (240 / steps) as i32,
-            Direction::Up => rect.top_left.y = rect.top_left.y + (240 / steps) as i32,
-            Direction::Down => rect.top_left.y = rect.top_left.y - (240 / steps) as i32,
+            Direction::Left => rect.top_left.x -= (240 / steps) as i32,
+            Direction::Right => rect.top_left.x += (240 / steps) as i32,
+            Direction::Up => rect.top_left.y += (240 / steps) as i32,
+            Direction::Down => rect.top_left.y -= (240 / steps) as i32,
         }
-        thread::sleep(Duration::from_millis(20));
+        thread::sleep(Duration::from_millis(10));
     }
+    hal.display.framebuffer.clear_black();
 
-    // hal.display.commit_display()
     Ok(())
 }
