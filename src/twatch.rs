@@ -3,7 +3,7 @@ use std::time::Duration;
 use embedded_hal_0_2::digital::v2::OutputPin;
 use esp_idf_hal::{
     delay,
-    gpio::{self, InterruptType, Output, SubscribedInput},
+    gpio::{self, Gpio23, InterruptType, Output, SubscribedInput},
     i2c,
     peripherals::Peripherals,
     prelude::*,
@@ -17,7 +17,7 @@ use anyhow::Result;
 use log::*;
 
 use embedded_svc::{event_bus::Postbox, sys_time::SystemTime};
-use esp_idf_svc::notify::EspBackgroundNotify;
+use esp_idf_svc::notify::EspNotify;
 
 use display_interface_spi::SPIInterfaceNoCS;
 
@@ -46,6 +46,7 @@ pub struct Hal<'a> {
     pub accel_irq: gpio::Gpio39<SubscribedInput>,
     pub touch_screen: Ft6x36<EspI2c1>,
     pub touch_irq: gpio::Gpio38<SubscribedInput>,
+    pub eventloop: EspNotify,
 }
 
 pub struct Twatch<'a> {
@@ -54,7 +55,7 @@ pub struct Twatch<'a> {
 }
 
 impl Twatch<'static> {
-    pub fn new(peripherals: Peripherals, mut eventloop: EspBackgroundNotify) -> Self {
+    pub fn new(peripherals: Peripherals, eventloop: EspNotify) -> Self {
         let pins = peripherals.pins;
         let backlight = pins
             .gpio12
@@ -78,16 +79,17 @@ impl Twatch<'static> {
             .expect("Error setting gpio19 to output");
 
         let config = <spi::config::Config as Default>::default()
-            .baudrate(26.MHz().into())
-            // .bit_order(embedded_hal::spi::BitOrder::MSBFirst)
+            .baudrate(80.MHz().into())
+            .write_only(true)
+            .dma(spi::Dma::Channel2(4096))
             .data_mode(embedded_hal::spi::MODE_0);
 
-        let spi = spi::Master::<spi::SPI2, _, _, _, _>::new(
-            peripherals.spi2,
+        let spi = spi::Master::<spi::SPI3, _, _, _, _>::new(
+            peripherals.spi3,
             spi::Pins {
                 sclk,
                 sdo,
-                sdi: Option::<gpio::Gpio21<gpio::Unknown>>::None,
+                sdi: Option::<Gpio23<Output>>::None,
                 cs: Some(cs),
             },
             config,
@@ -97,28 +99,42 @@ impl Twatch<'static> {
         let di = SPIInterfaceNoCS::new(spi, dc.into_output().expect("Error setting dc to output"));
         info!("Display Initialized");
 
-        let bl = Backlight::new(peripherals.ledc.channel0, peripherals.ledc.timer0, backlight);
+        let bl = Backlight::new(
+            peripherals.ledc.channel0,
+            peripherals.ledc.timer0,
+            backlight,
+        );
 
-        let display = TwatchDisplay::new(di, bl).unwrap();
+        let display = TwatchDisplay::new(di, bl).expect("Unable to initialize display");
 
-        let motor = pins.gpio4.into_output().unwrap();
+        let motor = pins
+            .gpio4
+            .into_output()
+            .expect("Unable to set gpio4 to output");
 
         let i2c0 = peripherals.i2c0;
-        let sda = pins.gpio21.into_output().unwrap();
-        let scl = pins.gpio22.into_output().unwrap();
+        let sda = pins
+            .gpio21
+            .into_output()
+            .expect("Unable to set gpio21 to output");
+        let scl = pins
+            .gpio22
+            .into_output()
+            .expect("Unable to set gpio22 to output");
         let config =
             <i2c::config::MasterConfig as Default>::default().baudrate(400_u32.kHz().into());
         let i2c0 = i2c::Master::<i2c::I2C0, _, _>::new(i2c0, i2c::MasterPins { sda, scl }, config)
-            .unwrap();
+            .expect("Unable to initialize I2C0");
 
-        let i2c0_shared_bus: &'static _ = shared_bus::new_std!(esp_idf_hal::i2c::Master<i2c::I2C0, gpio::Gpio21<gpio::Output>, gpio::Gpio22<gpio::Output>> = i2c0).unwrap_or_else(|| {
-            error!("Error initializing shared bus");
-            panic!("Error")
-        });
+        let i2c0_shared_bus: &'static _ = shared_bus::new_std!(crate::types::EspI2c0 = i2c0)
+            .expect("Unable to initialize shared_bus");
         info!("I2c shared bus initialized");
 
         let clock = PCF8563::new(i2c0_shared_bus.acquire_i2c());
-        let rtc_irq = pins.gpio37.into_input().unwrap();
+        let rtc_irq = pins
+            .gpio37
+            .into_input()
+            .expect("Unable to set gpio37 to input");
         let mut rtc_eventloop = eventloop.clone();
         let rtc_irq = unsafe {
             rtc_irq.into_subscribed(
@@ -129,10 +145,13 @@ impl Twatch<'static> {
                 InterruptType::NegEdge,
             )
         }
-        .unwrap();
+        .expect("Unable to register handler for rtc IRQ");
 
         let pmu = Pmu::new(i2c0_shared_bus.acquire_i2c());
-        let pmu_irq_pin = pins.gpio35.into_input().unwrap();
+        let pmu_irq_pin = pins
+            .gpio35
+            .into_input()
+            .expect("Unable to set gpio35 to input");
         let mut pmu_eventloop = eventloop.clone();
         let pmu_irq_pin = unsafe {
             pmu_irq_pin.into_subscribed(
@@ -143,10 +162,10 @@ impl Twatch<'static> {
                 InterruptType::NegEdge,
             )
         }
-        .unwrap();
+        .expect("Unable to register handler for pmu irq");
 
         let accel = Bma423::new(i2c0_shared_bus.acquire_i2c());
-        let accel_irq = pins.gpio39.into_input().unwrap();
+        let accel_irq = pins.gpio39.into_input().expect("Unable to set gpio39 to input");
         let mut accel_eventloop = eventloop.clone();
         let accel_irq = unsafe {
             accel_irq.into_subscribed(
@@ -159,22 +178,23 @@ impl Twatch<'static> {
                 InterruptType::NegEdge,
             )
         }
-        .unwrap();
+        .expect("Unable to register handler for accel irq");
 
         let i2c1 = peripherals.i2c1;
-        let sda = pins.gpio23.into_output().unwrap();
-        let scl = pins.gpio32.into_output().unwrap();
+        let sda = pins.gpio23.into_output().expect("Unable to set gpio23 to output");
+        let scl = pins.gpio32.into_output().expect("Unable to set gpio32 to output");
         let config =
             <i2c::config::MasterConfig as Default>::default().baudrate(400_u32.kHz().into());
         let i2c1 = i2c::Master::<i2c::I2C1, _, _>::new(i2c1, i2c::MasterPins { sda, scl }, config)
-            .unwrap();
+            .expect("Unable to initialize I2C1");
 
         let touch_screen = Ft6x36::new(i2c1, ft6x36::Dimension(240, 240));
-        let touch_irq = pins.gpio38.into_input().unwrap();
+        let touch_irq = pins.gpio38.into_input().expect("Unable to set gpio38 to input");
+        let mut touch_loop = eventloop.clone();
         let touch_irq = unsafe {
             touch_irq.into_subscribed(
                 move || {
-                    let _ = eventloop.post(
+                    let _ = touch_loop.post(
                         &TwatchRawEvent::Touch.into(),
                         Some(Duration::from_millis(0)),
                     );
@@ -182,7 +202,7 @@ impl Twatch<'static> {
                 InterruptType::NegEdge,
             )
         }
-        .unwrap();
+        .expect("Unable to register handler for touch irq");
 
         let hal = Hal {
             pmu,
@@ -195,6 +215,7 @@ impl Twatch<'static> {
             accel_irq,
             touch_screen,
             touch_irq,
+            eventloop,
         };
 
         Twatch {
@@ -204,19 +225,26 @@ impl Twatch<'static> {
     }
 
     pub fn init(&mut self) -> Result<()> {
+        info!("Initializing twatch");
+
+        info!("Initializing PMU");
         self.hal.pmu.init()?;
 
+        info!("Initializing Display");
         self.hal.display.init(&mut delay::Ets)?;
 
+        info!("Initializing screen power");
         self.hal.pmu.set_screen_power(State::On)?;
-        self.hal.display.set_display_level(1u32)?;
+        self.hal.display.set_display_level(25u32)?;
 
+        info!("Initializing touch screen");
         self.hal.touch_screen.init().map_err(TwatchError::from)?;
         match self.hal.touch_screen.get_info() {
             Some(info) => info!("Touch screen info: {info:?}"),
             None => warn!("No info"),
         }
 
+        info!("Initializing accelerometer");
         self.hal
             .accel
             .init(&mut delay::Ets)
@@ -240,13 +268,15 @@ impl Twatch<'static> {
     fn process_raw_event(&mut self, raw_event: TwatchRawEvent) -> Option<TwatchEvent> {
         let time = esp_idf_svc::systime::EspSystemTime {}.now();
         match raw_event {
-            TwatchRawEvent::Touch => self
-                .hal
-                .touch_screen
-                .get_touch_event()
-                .ok()
-                .and_then(|touch_event| self.hal.touch_screen.process_event(time, touch_event))
-                .map(|touch_event| TwatchEvent::new(Kind::Touch(touch_event))),
+            TwatchRawEvent::Touch => {
+                log::debug!("Touch event");
+                self.hal
+                    .touch_screen
+                    .get_touch_event()
+                    .ok()
+                    .and_then(|touch_event| self.hal.touch_screen.process_event(time, touch_event))
+                    .map(|touch_event| TwatchEvent::new(Kind::Touch(touch_event)))
+            }
             TwatchRawEvent::Accel => {
                 info!("AccelEvent");
                 None
@@ -262,6 +292,10 @@ impl Twatch<'static> {
                 info!("Rtc Event");
                 None
             }
+            TwatchRawEvent::Timer => {
+                info!("Timer event");
+                Some(TwatchEvent::new(Kind::Timer))
+            }
             _ => {
                 warn!("Unhandled event: {:?}", &raw_event);
                 None
@@ -275,7 +309,15 @@ impl Twatch<'static> {
             let hal = &mut self.hal;
             if let Some(event) = current_tile.process_event(hal, event) {
                 match (event.time, event.kind) {
-                    (_t, Kind::NewTile(tile)) => {
+                    (_t, Kind::NewTile(mut tile)) => {
+                        let _ = tile.init(hal);
+                        self.current_tile = tile;
+                    }
+                    (_t, Kind::PmuButtonPressed) => {
+                        hal.light_sleep()
+                            .unwrap_or_else(|e| warn!("Error going to light sleep: {}", e));
+                        let mut tile = Box::new(crate::tiles::sleep::SleepTile::default());
+                        let _ = tile.init(hal);
                         self.current_tile = tile;
                     }
                     (_t, event) => warn!("Unhandled event: {:?}", &event),
@@ -300,6 +342,7 @@ impl Hal<'static> {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn deep_sleep(&mut self) -> Result<()> {
         self.display.set_display_off()?;
         self.pmu.set_screen_power(State::Off)?;
@@ -322,6 +365,7 @@ impl Hal<'static> {
     pub fn wake_up(&mut self) -> Result<()> {
         self.display.set_display_on()?;
         self.pmu.set_screen_power(State::On)?;
+        self.display.set_display_level(25u32)?;
         Ok(())
     }
 }

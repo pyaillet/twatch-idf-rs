@@ -76,10 +76,18 @@ impl Pmu<'static> {
 
     #[allow(clippy::wrong_self_convention)]
     pub fn is_button_pressed(&mut self) -> Result<bool> {
-        self.axp20x
+        match self
+            .axp20x
             .read_irq()
             .map(|irq| irq.intersects(axp20x::EventsIrq::PowerKeyShortPress))
-            .map_err(|e| e.into())
+        {
+            Ok(true) => {
+                self.axp20x.clear_irq()?;
+                Ok(true)
+            }
+            Ok(false) => Ok(false),
+            Err(e) => Err(e.into()),
+        }
     }
 
     pub fn init_irq(&mut self) -> Result<()> {

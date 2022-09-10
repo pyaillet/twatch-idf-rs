@@ -5,10 +5,12 @@ mod pmu;
 mod tiles;
 mod twatch;
 mod types;
+mod utils;
 
 use embedded_svc::event_bus::EventBus;
+
 use esp_idf_hal::peripherals;
-use esp_idf_svc::notify::EspBackgroundNotify;
+use esp_idf_svc::notify::EspNotify;
 use esp_idf_sys::EspError;
 
 use log::*;
@@ -27,11 +29,11 @@ fn main() {
     let _subscription =
         eventloop.subscribe(move |raw_event: &u32| twatch.process_event((*raw_event).into()));
     loop {
-        std::thread::sleep(std::time::Duration::from_millis(5_000));
+        std::thread::sleep(std::time::Duration::from_millis(500));
     }
 }
 
-fn init_esp() -> Result<EspBackgroundNotify, EspError> {
+fn init_esp() -> Result<EspNotify, EspError> {
     esp_idf_sys::link_patches();
 
     // Bind the log crate to the ESP Logging facilities
@@ -46,12 +48,12 @@ fn init_esp() -> Result<EspBackgroundNotify, EspError> {
     #[allow(unused)]
     let sys_loop_stack = Arc::new(EspSysLoopStack::new()?);
 
-    let notify_configuration = esp_idf_svc::notify::BackgroundNotifyConfiguration {
+    let notify_configuration = esp_idf_svc::notify::Configuration {
         task_name: "BackgroundNotify",
         task_priority: 0,
         task_stack_size: 7168,
         task_pin_to_core: None,
     };
 
-    EspBackgroundNotify::new(&notify_configuration)
+    EspNotify::new(&notify_configuration)
 }

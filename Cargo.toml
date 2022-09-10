@@ -22,35 +22,39 @@ anyhow = {version = "1", features = ["backtrace"]}
 mutex-trait = { version = "0.2" }
 bitmask-enum = { version = "1.1" }
 num_enum = { version = "0.5" }
+byte-slice-cast = { version = "^1.2" }
 log = "0.4"
 
 # platform
 esp-idf-sys = { version = "^0.31", features = ["binstart", "std", "native"] }
-esp-idf-svc = { version = "^0.39", features = ["experimental"] }
-esp-idf-hal = "^0.35"
+esp-idf-svc = { version = "^0.42", features = ["experimental"] }
+esp-idf-hal = { version = "^0.38" }
 
 # hal
-embedded-svc = "^0.19"
-embedded-hal = "=1.0.0-alpha.7"
+embedded-svc = "0.22.1"
+embedded-hal = "=1.0.0-alpha.8"
 embedded-hal-0-2 = { package = "embedded-hal", version = "0.2", features = ["unproven"] }
 embedded-graphics-core = { version = "^0.3" }
 embedded-graphics = { version = "^0.7" }
-#embedded-graphics-framebuf = "0.0.2"
-embedded-graphics-framebuf = { git = "https://github.com/pyaillet/embedded-graphics-framebuf.git", branch = "add-boundary-checks" }
-#embedded-graphics-framebuf = { path = "../embedded-graphics-framebuf/" }
+embedded-graphics-framebuf = { git = "https://github.com/pyaillet/embedded-graphics-framebuf.git", rev = "62cc6e1" }
+#embedded-graphics-framebuf = { version = "^0.2" }
 profont = { version = "^0.5" }
-display-interface-spi = { version = "^0.4" }
+u8g2-fonts = "0.2.0"
+
+#display-interface-spi = { version = "^0.4" }
+display-interface-spi = { version = "0.4", git = "https://github.com/therealprof/display-interface.git", rev = "d61f3e7" }
 shared-bus = { version = "^0.2", features = ["std"] }
 accelerometer = { version = "^0.12" }
 
 # drivers
 bma423 = { version = "0.0.1" }
-mipidsi = { version = "^0.2" }
+#mipidsi = { version = "^0.3" }
+mipidsi = { git = "https://github.com/pyaillet/mipidsi.git", rev = "d830e40" }
 axp20x = { version = "0.0.1" }
 pcf8563 = { version = "^0.1" }
-ft6x36 = { version = "^0.4" }
+ft6x36 = { version = "^0.4", features = [ "event_process" ] }
 
 [build-dependencies]
-embuild = "0.28"
+embuild = "0.29.1"
 anyhow = "1"
 

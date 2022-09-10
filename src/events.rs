@@ -36,6 +36,7 @@ impl TwatchEvent {
 #[derive(Debug)]
 pub enum Kind {
     TimerRtc,
+    Timer,
     Accel,
     Touch(TouchEvent),
     PmuButtonPressed,
