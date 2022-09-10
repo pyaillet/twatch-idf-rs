@@ -51,7 +51,7 @@ impl OriginDimensions for TwatchDisplay {
 
 pub struct Backlight {
     channel: Channel<CHANNEL0, TIMER0, Arc<Timer<TIMER0>>, Gpio12<Output>>,
-    level: u32
+    level: u32,
 }
 
 impl Backlight {
@@ -61,7 +61,10 @@ impl Backlight {
             Arc::new(Timer::new(timer, &config).expect("Unable to create timer for backlight"));
         let channel = Channel::new(channel, timer0, backlight)
             .expect("Unable to create channel for backlight");
-        Self { channel, level: 100 }
+        Self {
+            channel,
+            level: 100,
+        }
     }
 }
 
@@ -90,17 +93,39 @@ impl TwatchDisplay {
     }
 
     pub fn commit_display_partial(&mut self, rect: Rectangle) -> Result<()> {
-        let partial_fb = &mut self.framebuffer.as_words()[((rect.top_left.y * 240) as usize)
-            ..((rect.top_left.y as u32 + rect.size.height) as usize) * 240];
-        self.display
-            .write_raw(
-                rect.top_left.x as u16,
-                rect.top_left.y as u16,
-                rect.top_left.x as u16 + rect.size.width as u16,
-                rect.top_left.y as u16 + rect.size.height as u16,
-                partial_fb,
-            )
-            .map_err(|_| TwatchError::Display)?;
+        if rect.size == self.bounding_box().size {
+            self.display
+                .write_raw(
+                    rect.top_left.x as u16,
+                    rect.top_left.y as u16,
+                    rect.top_left.x as u16 + rect.size.width as u16,
+                    rect.top_left.y as u16 + rect.size.height as u16,
+                    self.framebuffer.as_words(),
+                )
+                .map_err(|_| TwatchError::Display)?;
+        } else {
+            let mut partial_fb: Vec<u16> = vec![0; (rect.size.width * rect.size.height) as usize];
+            let sx: usize = rect.top_left.x as _;
+            let ex: usize = (rect.size.width + rect.top_left.x as u32) as _;
+
+            for i in rect.rows() {
+                let dsx = (rect.size.width * i as u32) as _;
+                let dex = (rect.size.width * (i + 1) as u32) as _;
+                let ssx = sx + (i as u32 * 240) as usize;
+                let sex = ex + (i as u32 * 240) as usize;
+                partial_fb[dsx..dex].copy_from_slice(&self.framebuffer.as_words()[ssx..sex]);
+            }
+
+            self.display
+                .write_raw(
+                    rect.top_left.x as u16,
+                    rect.top_left.y as u16,
+                    rect.top_left.x as u16 + rect.size.width as u16 - 1,
+                    rect.top_left.y as u16 + rect.size.height as u16 - 1,
+                    &mut partial_fb,
+                )
+                .map_err(|_| TwatchError::Display)?;
+        }
         Ok(())
     }
 

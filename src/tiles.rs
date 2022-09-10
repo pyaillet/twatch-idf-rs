@@ -1,10 +1,16 @@
 pub(crate) mod hello;
-pub(crate) mod sleep;
-pub(crate) mod time;
 pub(crate) mod light;
 pub(crate) mod motor;
+pub(crate) mod sleep;
+pub(crate) mod time;
+
+use std::{thread, time::Duration};
 
 use anyhow::Result;
+use embedded_graphics::{
+    prelude::{Point, Size},
+    primitives::Rectangle,
+};
 use ft6x36::Direction;
 
 #[allow(unused_imports)]
@@ -42,12 +48,44 @@ pub(crate) fn move_to_tile(
     hal: &mut Hal<'static>,
     _from: &mut impl WatchTile,
     to: &mut impl WatchTile,
-    _dir: &Direction,
+    dir: &Direction,
 ) -> Result<()> {
     hal.display.framebuffer.clear_black();
     to.update_state(hal);
     to.display_tile(hal)?;
 
-    hal.display.commit_display()?;
+    let steps = 12;
+
+    let mut rect = Rectangle {
+        top_left: match dir {
+            Direction::Up => Point { x: 0, y: 0 },
+            Direction::Down => Point { x: 0, y: 220 },
+            Direction::Left => Point { x: 220, y: 0 },
+            Direction::Right => Point { x: 0, y: 0 },
+        },
+        size: match dir {
+            Direction::Right | Direction::Left => Size {
+                width: 240 / steps,
+                height: 240,
+            },
+            Direction::Up | Direction::Down => Size {
+                width: 240,
+                height: 240 / steps,
+            },
+        },
+    };
+
+    for _i in 0..steps {
+        hal.display.commit_display_partial(rect)?;
+        match dir {
+            Direction::Left => rect.top_left.x = rect.top_left.x - (240 / steps) as i32,
+            Direction::Right => rect.top_left.x = rect.top_left.x + (240 / steps) as i32,
+            Direction::Up => rect.top_left.y = rect.top_left.y + (240 / steps) as i32,
+            Direction::Down => rect.top_left.y = rect.top_left.y - (240 / steps) as i32,
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+
+    // hal.display.commit_display()
     Ok(())
 }
