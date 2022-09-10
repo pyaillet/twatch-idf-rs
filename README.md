@@ -11,25 +11,25 @@ This project is a Work in Progress of a rust firmware for the T-Watch-v1 from Li
 
 What's working ?
 
-- [?] Power Management Unit - using my own driver for [AXP202](https://github.com/pyaillet/axp20x-rs)
+- [x] Power Management Unit - using my own driver for [AXP202](https://github.com/pyaillet/axp20x-rs)
   - [x] Power button
   - [x] Battery level
-  - [?] Plugged in status - Not tested
+  - [ ] Plugged in status - Not tested
   - [ ] Deep sleep
 - [x] Screen - using [mipidsi crate](https://github.com/almindor/mipidsi)
   - [x] Backlight settings
 - [x] Touchscreen - using my own driver for [FT6x36](https://github.com/pyaillet/ft6x36-rs)
-- [?] Accelerometer - using my own driver of [BMA423](https://github.com/pyaillet/bma423-rs/)
+- [x] Accelerometer - using my own driver of [BMA423](https://github.com/pyaillet/bma423-rs/)
   - [x] X/Y/Z axis sensors
   - [ ] Actity recognition
   - [ ] Step counter
 - [ ] I2S Speaker
-- [?] WiFi should work, but not used right nown
+- [x] WiFi should work, but not used right nown
 - [ ] BLE - WIP [here](https://github.com/pyaillet/esp-idf-ble)
 - [x] Vibration with the included motor
-- [?] Clock - using [PCF8563 realtime clock driver](https://github.com/nebelgrau77/pcf8563-rs)
+- [x] Clock - using [PCF8563 realtime clock driver](https://github.com/nebelgrau77/pcf8563-rs)
   - [x] Time
-  - [?] Alarms - Not tested
+  - [ ] Alarms - Not tested
 
 ## What's included
 
