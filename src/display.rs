@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
-use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
+use embedded_graphics::{pixelcolor::Rgb565, prelude::*, primitives::Rectangle};
 
 use embedded_graphics_framebuf::{AsWords, FrameBuf};
 use embedded_hal_0_2::blocking::delay::DelayUs;
@@ -12,11 +12,11 @@ use esp_idf_hal::{
     ledc::{config::TimerConfig, Channel, Timer, CHANNEL0, TIMER0},
     prelude::*,
 };
+use log::*;
 use mipidsi::Display;
 
 pub use crate::errors::*;
 use crate::types::EspSpi2InterfaceNoCS;
-use crate::utils::measure_exec_time;
 
 pub struct TwatchDisplay {
     pub display: Display<EspSpi2InterfaceNoCS, mipidsi::NoPin, mipidsi::models::ST7789>,
@@ -51,14 +51,17 @@ impl OriginDimensions for TwatchDisplay {
 
 pub struct Backlight {
     channel: Channel<CHANNEL0, TIMER0, Arc<Timer<TIMER0>>, Gpio12<Output>>,
+    level: u32
 }
 
 impl Backlight {
     pub fn new(channel: CHANNEL0, timer: TIMER0, backlight: Gpio12<Output>) -> Self {
         let config = TimerConfig::default().frequency(5.kHz().into());
-        let timer0 = Arc::new(Timer::new(timer, &config).unwrap());
-        let channel = Channel::new(channel, timer0, backlight).unwrap();
-        Self { channel }
+        let timer0 =
+            Arc::new(Timer::new(timer, &config).expect("Unable to create timer for backlight"));
+        let channel = Channel::new(channel, timer0, backlight)
+            .expect("Unable to create channel for backlight");
+        Self { channel, level: 100 }
     }
 }
 
@@ -80,31 +83,50 @@ impl TwatchDisplay {
         self.display
             .init(delay_source, Default::default())
             .map_err(|e| {
-                log::info!("Error initializing display {:?}", e);
+                info!("Error initializing display {e:?}");
                 TwatchError::Display
             })?;
         Ok(())
     }
 
+    pub fn commit_display_partial(&mut self, rect: Rectangle) -> Result<()> {
+        let partial_fb = &mut self.framebuffer.as_words()[((rect.top_left.y * 240) as usize)
+            ..((rect.top_left.y as u32 + rect.size.height) as usize) * 240];
+        self.display
+            .write_raw(
+                rect.top_left.x as u16,
+                rect.top_left.y as u16,
+                rect.top_left.x as u16 + rect.size.width as u16,
+                rect.top_left.y as u16 + rect.size.height as u16,
+                partial_fb,
+            )
+            .map_err(|_| TwatchError::Display)?;
+        Ok(())
+    }
+
     pub fn commit_display(&mut self) -> Result<()> {
-        measure_exec_time!(
-            {
-                self.display
-                    .write_raw(0, 0, 240, 240, self.framebuffer.as_words())
-                    .map_err(|_| TwatchError::Display)?;
+        self.commit_display_partial(Rectangle {
+            top_left: Point::default(),
+            size: Size {
+                width: 240,
+                height: 240,
             },
-            "commit_display"
-        );
+        })?;
 
         self.framebuffer.clear_black();
         Ok(())
     }
 
+    pub fn get_display_level(&self) -> u32 {
+        self.backlight.level
+    }
+
     pub fn set_display_level<I: Into<u32>>(&mut self, level: I) -> Result<()> {
+        self.backlight.level = level.into();
         let max_duty = self.backlight.channel.get_max_duty();
         self.backlight
             .channel
-            .set_duty(level.into() * max_duty / 100)?;
+            .set_duty(self.backlight.level * max_duty / 100)?;
         Ok(())
     }
 

@@ -7,10 +7,10 @@ use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 use embedded_graphics::text::Text;
 use ft6x36::{Direction, TouchEvent};
-use profont::PROFONT_24_POINT;
+use profont::{PROFONT_18_POINT, PROFONT_24_POINT};
 
 use crate::events::Kind;
-use crate::tiles::{DisplayTile, WatchTile};
+use crate::tiles::WatchTile;
 use crate::{events::TwatchEvent, twatch::Hal};
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -19,8 +19,13 @@ pub struct HelloTile {}
 unsafe impl Send for HelloTile {}
 
 impl WatchTile for HelloTile {
-    fn run_with_offset(&mut self, hal: &mut Hal<'static>, offset: Point) -> Result<()> {
-        self.display_tile(hal, offset)?;
+    fn init(&mut self, hal: &mut Hal<'static>) -> Result<()> {
+        self.display_tile(hal)?;
+        hal.display.commit_display()
+    }
+
+    fn run(&mut self, hal: &mut Hal<'static>) -> Result<()> {
+        self.display_tile(hal)?;
         hal.display.commit_display()?;
         Ok(())
     }
@@ -37,8 +42,13 @@ impl WatchTile for HelloTile {
                     let _ = crate::tiles::move_to_tile(hal, self, &mut time_tile, dir);
                     Some(TwatchEvent::new(Kind::NewTile(Box::new(time_tile))))
                 }
+                Direction::Right => {
+                    let mut light_tile = crate::tiles::light::LightTile::default();
+                    let _ = crate::tiles::move_to_tile(hal, self, &mut light_tile, dir);
+                    Some(TwatchEvent::new(Kind::NewTile(Box::new(light_tile))))
+                }
                 _ => {
-                    info!("Swipe: {:?}", dir);
+                    info!("Swipe: {dir:?}");
                     None
                 }
             },
@@ -46,13 +56,13 @@ impl WatchTile for HelloTile {
             _ => Some(event),
         }
     }
-}
 
-impl DisplayTile for HelloTile {
-    fn display_tile(&self, hal: &mut Hal<'static>, offset: Point) -> Result<()> {
+    fn display_tile(&self, hal: &mut Hal<'static>) -> Result<()> {
         let style = MonoTextStyle::new(&PROFONT_24_POINT, Rgb565::WHITE);
+        let style_small = MonoTextStyle::new(&PROFONT_18_POINT, Rgb565::WHITE);
 
-        Text::new("Ceci est une tres", Point::new(0, 30) + offset, style).draw(&mut hal.display)?;
+        Text::new("Hello T-Watch", Point::new(0, 30), style).draw(&mut hal.display)?;
+        Text::new("Try to swipe left", Point::new(0, 80), style_small).draw(&mut hal.display)?;
 
         Ok(())
     }

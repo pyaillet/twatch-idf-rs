@@ -29,7 +29,7 @@ fn main() {
     let _subscription =
         eventloop.subscribe(move |raw_event: &u32| twatch.process_event((*raw_event).into()));
     loop {
-        std::thread::sleep(std::time::Duration::from_millis(5_000));
+        std::thread::sleep(std::time::Duration::from_millis(500));
     }
 }
 

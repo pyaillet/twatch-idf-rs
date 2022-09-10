@@ -46,6 +46,7 @@ pub struct Hal<'a> {
     pub accel_irq: gpio::Gpio39<SubscribedInput>,
     pub touch_screen: Ft6x36<EspI2c1>,
     pub touch_irq: gpio::Gpio38<SubscribedInput>,
+    pub eventloop: EspNotify,
 }
 
 pub struct Twatch<'a> {
@@ -54,7 +55,7 @@ pub struct Twatch<'a> {
 }
 
 impl Twatch<'static> {
-    pub fn new(peripherals: Peripherals, mut eventloop: EspNotify) -> Self {
+    pub fn new(peripherals: Peripherals, eventloop: EspNotify) -> Self {
         let pins = peripherals.pins;
         let backlight = pins
             .gpio12
@@ -80,8 +81,7 @@ impl Twatch<'static> {
         let config = <spi::config::Config as Default>::default()
             .baudrate(80.MHz().into())
             .write_only(true)
-            .dma(spi::Dma::Channel2)
-            .max_transfer_size(240 * 240 * 2 + 8)
+            .dma(spi::Dma::Channel2(4096))
             .data_mode(embedded_hal::spi::MODE_0);
 
         let spi = spi::Master::<spi::SPI3, _, _, _, _>::new(
@@ -105,27 +105,36 @@ impl Twatch<'static> {
             backlight,
         );
 
-        let display = TwatchDisplay::new(di, bl).unwrap();
+        let display = TwatchDisplay::new(di, bl).expect("Unable to initialize display");
 
-        let motor = pins.gpio4.into_output().unwrap();
+        let motor = pins
+            .gpio4
+            .into_output()
+            .expect("Unable to set gpio4 to output");
 
         let i2c0 = peripherals.i2c0;
-        let sda = pins.gpio21.into_output().unwrap();
-        let scl = pins.gpio22.into_output().unwrap();
+        let sda = pins
+            .gpio21
+            .into_output()
+            .expect("Unable to set gpio21 to output");
+        let scl = pins
+            .gpio22
+            .into_output()
+            .expect("Unable to set gpio22 to output");
         let config =
             <i2c::config::MasterConfig as Default>::default().baudrate(400_u32.kHz().into());
         let i2c0 = i2c::Master::<i2c::I2C0, _, _>::new(i2c0, i2c::MasterPins { sda, scl }, config)
-            .unwrap();
+            .expect("Unable to initialize I2C0");
 
         let i2c0_shared_bus: &'static _ = shared_bus::new_std!(crate::types::EspI2c0 = i2c0)
-            .unwrap_or_else(|| {
-                error!("Error initializing shared bus");
-                panic!("Error")
-            });
+            .expect("Unable to initialize shared_bus");
         info!("I2c shared bus initialized");
 
         let clock = PCF8563::new(i2c0_shared_bus.acquire_i2c());
-        let rtc_irq = pins.gpio37.into_input().unwrap();
+        let rtc_irq = pins
+            .gpio37
+            .into_input()
+            .expect("Unable to set gpio37 to input");
         let mut rtc_eventloop = eventloop.clone();
         let rtc_irq = unsafe {
             rtc_irq.into_subscribed(
@@ -136,10 +145,13 @@ impl Twatch<'static> {
                 InterruptType::NegEdge,
             )
         }
-        .unwrap();
+        .expect("Unable to register handler for rtc IRQ");
 
         let pmu = Pmu::new(i2c0_shared_bus.acquire_i2c());
-        let pmu_irq_pin = pins.gpio35.into_input().unwrap();
+        let pmu_irq_pin = pins
+            .gpio35
+            .into_input()
+            .expect("Unable to set gpio35 to input");
         let mut pmu_eventloop = eventloop.clone();
         let pmu_irq_pin = unsafe {
             pmu_irq_pin.into_subscribed(
@@ -150,10 +162,10 @@ impl Twatch<'static> {
                 InterruptType::NegEdge,
             )
         }
-        .unwrap();
+        .expect("Unable to register handler for pmu irq");
 
         let accel = Bma423::new(i2c0_shared_bus.acquire_i2c());
-        let accel_irq = pins.gpio39.into_input().unwrap();
+        let accel_irq = pins.gpio39.into_input().expect("Unable to set gpio39 to input");
         let mut accel_eventloop = eventloop.clone();
         let accel_irq = unsafe {
             accel_irq.into_subscribed(
@@ -166,22 +178,23 @@ impl Twatch<'static> {
                 InterruptType::NegEdge,
             )
         }
-        .unwrap();
+        .expect("Unable to register handler for accel irq");
 
         let i2c1 = peripherals.i2c1;
-        let sda = pins.gpio23.into_output().unwrap();
-        let scl = pins.gpio32.into_output().unwrap();
+        let sda = pins.gpio23.into_output().expect("Unable to set gpio23 to output");
+        let scl = pins.gpio32.into_output().expect("Unable to set gpio32 to output");
         let config =
             <i2c::config::MasterConfig as Default>::default().baudrate(400_u32.kHz().into());
         let i2c1 = i2c::Master::<i2c::I2C1, _, _>::new(i2c1, i2c::MasterPins { sda, scl }, config)
-            .unwrap();
+            .expect("Unable to initialize I2C1");
 
         let touch_screen = Ft6x36::new(i2c1, ft6x36::Dimension(240, 240));
-        let touch_irq = pins.gpio38.into_input().unwrap();
+        let touch_irq = pins.gpio38.into_input().expect("Unable to set gpio38 to input");
+        let mut touch_loop = eventloop.clone();
         let touch_irq = unsafe {
             touch_irq.into_subscribed(
                 move || {
-                    let _ = eventloop.post(
+                    let _ = touch_loop.post(
                         &TwatchRawEvent::Touch.into(),
                         Some(Duration::from_millis(0)),
                     );
@@ -189,7 +202,7 @@ impl Twatch<'static> {
                 InterruptType::NegEdge,
             )
         }
-        .unwrap();
+        .expect("Unable to register handler for touch irq");
 
         let hal = Hal {
             pmu,
@@ -202,6 +215,7 @@ impl Twatch<'static> {
             accel_irq,
             touch_screen,
             touch_irq,
+            eventloop,
         };
 
         Twatch {
@@ -278,6 +292,10 @@ impl Twatch<'static> {
                 info!("Rtc Event");
                 None
             }
+            TwatchRawEvent::Timer => {
+                info!("Timer event");
+                Some(TwatchEvent::new(Kind::Timer))
+            }
             _ => {
                 warn!("Unhandled event: {:?}", &raw_event);
                 None
@@ -291,7 +309,15 @@ impl Twatch<'static> {
             let hal = &mut self.hal;
             if let Some(event) = current_tile.process_event(hal, event) {
                 match (event.time, event.kind) {
-                    (_t, Kind::NewTile(tile)) => {
+                    (_t, Kind::NewTile(mut tile)) => {
+                        let _ = tile.init(hal);
+                        self.current_tile = tile;
+                    }
+                    (_t, Kind::PmuButtonPressed) => {
+                        hal.light_sleep()
+                            .unwrap_or_else(|e| warn!("Error going to light sleep: {}", e));
+                        let mut tile = Box::new(crate::tiles::sleep::SleepTile::default());
+                        let _ = tile.init(hal);
                         self.current_tile = tile;
                     }
                     (_t, event) => warn!("Unhandled event: {:?}", &event),
@@ -339,6 +365,7 @@ impl Hal<'static> {
     pub fn wake_up(&mut self) -> Result<()> {
         self.display.set_display_on()?;
         self.pmu.set_screen_power(State::On)?;
+        self.display.set_display_level(25u32)?;
         Ok(())
     }
 }
