@@ -13,7 +13,7 @@ What's working ?
 
 - [x] Power Management Unit - using my own driver for [AXP202](https://github.com/pyaillet/axp20x-rs)
   - [x] Power button
-  - [x] Battery level
+  - [x] Battery level
   - [ ] Plugged in status - Not tested
   - [ ] Deep sleep
 - [x] Screen - using [mipidsi crate](https://github.com/almindor/mipidsi)
@@ -35,16 +35,16 @@ What's working ?
 
 This project is a tech demo. The firmware comes with 5 tiles demonstrating some features:
 
-- Hello world: only displays text
-- Light: adjust brightness of the screen backlight
-- Motor: demonstrate the vibrator
-- Time: Shows Realtime clock, battery level, accelerometer and swipe gestures
-- Sleep: Disable screen and backlight when button is pressed
+- [Hello world](./src/tiles/hello.rs): only displays text
+- [Light](./src/tiles/light.rs): adjust brightness of the screen backlight
+- [Motor](./src/tiles/motor.rs): demonstrate the vibrator
+- [Time](./src/tiles/time.rs): Shows Realtime clock, battery level, accelerometer and swipe gestures
+- [Sleep](./src/tiles/sleep.rs): Disable screen and backlight when button is pressed
 
 ## Credits
 
 Many things from this project are inspired by the [rust-esp32-std-demo](https://github.com/ivmarkov/rust-esp32-std-demo).
-Kudos to the people on #esp-rs:matrix.org for their help.
+Kudos to the people on [#esp-rs:matrix.org](https://matrix.to/#/#esp-rs:matrix.org) for their help.
 
 ## How to use?
 
