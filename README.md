@@ -7,7 +7,8 @@ TTGO [T-Watch 2020 v1](http://www.lilygo.cn/prod_view.aspx?TypeId=50053&Id=1380&
 
 ## Preview
 
-[](./assets/demo.webm.mov)
+[demo.webm](https://user-images.githubusercontent.com/11957179/196264757-b4c116e9-1d47-490b-8251-05fd6c138986.webm)
+
 
 ## Description
 
