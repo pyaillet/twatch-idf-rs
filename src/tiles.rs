@@ -3,6 +3,7 @@ pub(crate) mod light;
 pub(crate) mod motor;
 pub(crate) mod sleep;
 pub(crate) mod time;
+pub(crate) mod ferris;
 
 use std::{thread, time::Duration};
 
@@ -83,7 +84,7 @@ pub(crate) fn move_to_tile(
             Direction::Up => rect.top_left.y += (240 / steps) as i32,
             Direction::Down => rect.top_left.y -= (240 / steps) as i32,
         }
-        thread::sleep(Duration::from_millis(10));
+        thread::sleep(Duration::from_millis(5));
     }
     hal.display.framebuffer.clear_black();
 

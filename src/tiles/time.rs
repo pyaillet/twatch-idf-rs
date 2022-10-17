@@ -84,9 +84,9 @@ impl WatchTile for TimeTile {
         match (&event.time, &event.kind) {
             (_, Kind::Touch(TouchEvent::Swipe(dir, _info))) => match dir {
                 Direction::Right => {
-                    let mut hello_tile = crate::tiles::hello::HelloTile::default();
-                    let _ = crate::tiles::move_to_tile(hal, self, &mut hello_tile, dir);
-                    Some(TwatchEvent::new(Kind::NewTile(Box::new(hello_tile))))
+                    let mut ferris_tile = crate::tiles::ferris::FerrisTile::default();
+                    let _ = crate::tiles::move_to_tile(hal, self, &mut ferris_tile, dir);
+                    Some(TwatchEvent::new(Kind::NewTile(Box::new(ferris_tile))))
                 }
                 _ => {
                     info!("Swipe: {dir:?}");

@@ -5,6 +5,10 @@
 
 TTGO [T-Watch 2020 v1](http://www.lilygo.cn/prod_view.aspx?TypeId=50053&Id=1380&FId=t3:50053:3) Rust firmware.
 
+## Preview
+
+[](./assets/demo.webm.mov)
+
 ## Description
 
 This project is a Work in Progress of a rust firmware for the T-Watch-v1 from Lilygo.

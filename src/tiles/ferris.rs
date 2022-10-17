@@ -1,12 +1,10 @@
 use anyhow::Result;
 
-use embedded_graphics::mono_font::MonoTextStyle;
+use embedded_graphics::image::{Image, ImageRawLE};
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
-use embedded_graphics::text::Text;
-use ft6x36::{Direction, TouchEvent};
-use profont::{PROFONT_18_POINT, PROFONT_24_POINT};
 
+use ft6x36::{TouchEvent, Direction};
 use log::*;
 
 use crate::events::Kind;
@@ -14,11 +12,11 @@ use crate::tiles::WatchTile;
 use crate::{events::TwatchEvent, twatch::Hal};
 
 #[derive(Copy, Clone, Debug, Default)]
-pub struct HelloTile {}
+pub struct FerrisTile {}
 
-unsafe impl Send for HelloTile {}
+unsafe impl Send for FerrisTile {}
 
-impl WatchTile for HelloTile {
+impl WatchTile for FerrisTile {
     fn init(&mut self, hal: &mut Hal<'static>) -> Result<()> {
         self.display_tile(hal)?;
         hal.display.commit_display()
@@ -38,14 +36,14 @@ impl WatchTile for HelloTile {
         match (&event.time, &event.kind) {
             (_, Kind::Touch(TouchEvent::Swipe(dir, _info))) => match dir {
                 Direction::Left => {
-                    let mut ferris_tile = crate::tiles::ferris::FerrisTile::default();
-                    let _ = crate::tiles::move_to_tile(hal, self, &mut ferris_tile, dir);
-                    Some(TwatchEvent::new(Kind::NewTile(Box::new(ferris_tile))))
+                    let mut time_tile = crate::tiles::time::TimeTile::default();
+                    let _ = crate::tiles::move_to_tile(hal, self, &mut time_tile, dir);
+                    Some(TwatchEvent::new(Kind::NewTile(Box::new(time_tile))))
                 }
                 Direction::Right => {
-                    let mut light_tile = crate::tiles::light::LightTile::default();
-                    let _ = crate::tiles::move_to_tile(hal, self, &mut light_tile, dir);
-                    Some(TwatchEvent::new(Kind::NewTile(Box::new(light_tile))))
+                    let mut hello_tile = crate::tiles::hello::HelloTile::default();
+                    let _ = crate::tiles::move_to_tile(hal, self, &mut hello_tile, dir);
+                    Some(TwatchEvent::new(Kind::NewTile(Box::new(hello_tile))))
                 }
                 _ => {
                     info!("Swipe: {dir:?}");
@@ -58,12 +56,10 @@ impl WatchTile for HelloTile {
     }
 
     fn display_tile(&self, hal: &mut Hal<'static>) -> Result<()> {
-        let style = MonoTextStyle::new(&PROFONT_24_POINT, Rgb565::WHITE);
-        let style_small = MonoTextStyle::new(&PROFONT_18_POINT, Rgb565::WHITE);
-
-        Text::new("Hello T-Watch", Point::new(0, 30), style).draw(&mut hal.display)?;
-        Text::new("Try to swipe left", Point::new(0, 80), style_small).draw(&mut hal.display)?;
-
+        let ferris_data: ImageRawLE<Rgb565> =
+            ImageRawLE::new(include_bytes!("../../assets/ferris.raw"), 86);
+        let ferris: Image<_> = Image::new(&ferris_data, Point::new(100, 80));
+        ferris.draw(&mut hal.display).unwrap();
         Ok(())
     }
 }
